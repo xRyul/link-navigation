@@ -1,8 +1,403 @@
-/*
+@keyframes fadeInUp {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.view-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
 
-If your plugin does not need CSS, delete this file.
+.link-navigator-inlinks,
+.link-navigator-outlinks {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.5em 0.8em;
+    border-radius: 4px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
 
-*/
+.link-navigator-inlinks:hover,
+.link-navigator-outlinks:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.view-header-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.link-navigator-details-wrapper {
+    position: absolute;
+    width: 100%;
+    z-index: 1000;
+    left: 0;
+}
+
+.link-navigator-details-wrapper .clickable-icon {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+}
+
+.link-navigator-details {
+    display: flex;
+    justify-content: space-between;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 80%;
+    max-height: 600px; /* Set a maximum height */
+    overflow-y: auto; /* Add vertical scrollbar if content overflows */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin: 10px auto;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    transform: translateY(-10px);
+    animation: fadeInUp 0.3s ease forwards;
+}
+
+
+
+.link-navigator-details.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.link-navigator-vertical {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.link-navigator-vertical .link-navigator-inlinks,
+.link-navigator-vertical .link-navigator-outlinks {
+    padding: 5px 0;
+}
+
+.depth-control {
+    display: flex;
+    align-items: center;
+}
+
+.depth-control input {
+    width: 60px;
+    margin-right: 10px;
+    margin-left: 10px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    padding: 4px 8px;
+}
+
+.depth-control button {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    padding: 4px 12px;
+    margin-top: 0;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.button-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 0;
+}
+
+.button-container button {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.button-container button:hover {
+    background-color: var(--interactive-accent-hover);
+}
+
+.button-container .clickable-icon {
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.button-container .clickable-icon:hover {
+    color: var(--text-normal);
+}
+
+.canvas-links-toggle {
+    margin-left: 10px;
+}
+
+.canvas-links-toggle.active {
+    background-color: var(--interactive-accent-hover);
+}
+
+
+.depth-control button:hover {
+    background-color: var(--interactive-accent-hover);
+}
+
+.link-hierarchy ul {
+    list-style-type: none;
+
+}
+
+.link-hierarchy > ul {
+    border-left: none;
+    margin-left: 0;
+}
+
+.link-hierarchy > ul > li {
+    margin-bottom: 10px;
+}
+
+.link-hierarchy li {
+    margin-bottom: 0.5em;
+    position: relative;
+}
+
+/* .link-hierarchy li::before {
+    content: '';
+    position: absolute;
+    top: 0.7em;
+    left: -1.5em;
+    width: 1em;
+    height: 1px;
+    background-color: var(--background-modifier-border);
+} */
+
+.link-hierarchy .inlink {
+    color: var(--text-muted);
+}
+
+.link-hierarchy .current-note {
+    font-weight: bold;
+    color: var(--text-normal);
+}
+
+.link-hierarchy .outlink {
+    color: var(--text-accent);
+}
+
+.link-hierarchy .outlinks-list {
+    margin-top: 5px;
+}
+
+.link-hierarchy .outlinks-list .outlink {
+    margin-bottom: 5px;
+}
+
+.link-hierarchy .internal-link {
+    color: var(--text-accent);
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.link-hierarchy .internal-link:hover {
+    color: var(--text-accent-hover);
+    text-decoration: underline;
+}
+
+.link-hierarchy .broken-link {
+    color: var(--text-error);
+    text-decoration: line-through;
+}
+
+.link-hierarchy .inlink > span:first-child,
+.link-hierarchy .outlink > span:first-child {
+    color: var(--text-muted);
+    margin-right: 5px;
+}
+
+.link-hierarchy a {
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.link-hierarchy a:hover {
+    color: var(--text-accent);
+    text-decoration: underline;
+}
+
+/* Ensure the details view doesn't overlap with the editor in Edit mode */
+.markdown-source-view .link-navigator-details-wrapper {
+    margin-bottom: 40px;
+}
+
+/* Add some space above the content in Reading mode */
+.markdown-reading-view .link-navigator-details-wrapper + .markdown-preview-view {
+    margin-top: 60px;
+}
+
+.link-navigator-details a.internal-link {
+    cursor: pointer;
+    color: var(--text-accent);
+    text-decoration: none;
+}
+
+.link-navigator-details a.internal-link:hover {
+    text-decoration: underline;
+}
+
+.link-navigator-details .broken-link {
+    color: var(--text-error);
+    text-decoration: line-through;
+}
+
+.link-navigator-details .inlink > span:first-child,
+.link-navigator-details .outlink > span:first-child {
+    color: var(--text-muted);
+    margin-right: 5px;
+}
+
+.link-navigator-controls {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.link-navigator-controls .button-container,
+.link-navigator-controls .toggle-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.link-navigator-controls button {
+    background-color: var(--background-secondary);
+    color: var(--text-muted);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    margin-right: 5px;
+    display: inline-block;
+}
+
+.link-navigator-controls button:hover {
+    background-color: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.link-navigator-controls button.active {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.link-navigator-controls .toggle-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.link-hierarchy-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.link-hierarchy-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.link-hierarchy-canvas {
+    flex: 0 0 200px;
+}
+
+.depth-and-buttons-wrapper {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+
+.depth-control input,
+.button-container button,
+.canvas-links-toggle {
+    margin: 0;
+}
+
+.canvas-links {
+    margin-top: 10px;
+    padding-top: 5px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.canvas-links-title {
+    margin-bottom: 0;
+}
+
+.canvas-links-list {
+    margin: auto;
+    list-style-type: none;
+    padding-left: 0;
+
+}
+
+.canvas-links-toggle.active {
+    background-color: var(--interactive-accent-hover);
+}
+
+.inlink-outlinks.active {
+    background-color: red;
+}
+
+.inlink-outlinks {
+    margin-left: 20px;
+}
+
+.inlink-outlinks.hidden {
+    display: none;
+}
+
+.inlink-outlinks ul {
+    margin-top: 5px;
+    margin-left: 20px;
+}
+
+.link-hierarchy-wrapper .outlinks-list {
+    display: none;
+}
+
+.link-hierarchy-wrapper.show-outlinks .outlinks-list {
+    display: block;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+@media (max-width: 600px) {
+    .link-hierarchy-wrapper {
+        flex-direction: column;
+    }
+
+    .link-hierarchy-canvas {
+        margin-top: 20px;
+    }
+}

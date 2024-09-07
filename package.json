@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "link-navigation",
+	"version": "0.0.1",
+	"description": "Navigate between incoming links (inlinks), outgoing links (outlinks) N levels deep. Links from Canvas are also supported.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
