@@ -47,6 +47,7 @@ export default class LinkNavigationPlugin extends Plugin {
     private readonly CLEANUP_NOTICE_COOLDOWN = 5000; // 5 seconds cooldown
 
     async onload() {
+        new Notice ("LinkNavigationPlugin: Starting to load");
         await this.loadSettings();
         this.addSettingTab(new LinkNavigationSettingTab(this.app, this));
 
