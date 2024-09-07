@@ -29,11 +29,10 @@ Thus it helps by allowing you to:
 
 ## Features
 
-- Hierarchical view of links
+- Hierarchical view of links*
 - Show links from Canvas files
 - Depth Control for Link Hierarchies: Allows users to define how deep the plugin should traverse the link hierarchy (e.g., links of links).
 - Caching Mechanism
-
 
 # Todo:
 
@@ -52,3 +51,12 @@ Thus it helps by allowing you to:
 - **Cache Timeout**: Set how long to keep link data in cache before refreshing.
 - **Cache Cleanup Interval**: Define how often to clean up the cache.
 - **Show Cache Cleanup Notice**: Choose whether to display notifications about cache cleanup.
+
+
+*Links - it mainly deals with internal link:
+- Resolved links: Links to notes that actually exist in your vault.
+- Incoming links (or inlinks): links to the active note
+- Outgoing links (or outlinks): links from the active note
+- Frontmatter links: Any links found in the frontmatter section of your notes.
+- Canvas links - if current note is embbed anywhere in any of the Canvas files it will locate them
+
