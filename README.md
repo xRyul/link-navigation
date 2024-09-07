@@ -37,7 +37,7 @@ Thus it helps by allowing you to:
 
 # Todo:
 
-- [ ] Mobile support!!!
+- [x] Mobile support!!!
 - [ ] Add support for changing inlinks, outlinks, to e.g. button, incoming links, outgoing links
 - [ ] Fix detailed view not closing in external / 2nd window 
 - [ ] Investigate and optimise. Currently, pLugin load time fluctates between 1ms and 15ms??
