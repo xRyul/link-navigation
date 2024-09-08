@@ -37,13 +37,13 @@ Thus it helps by allowing you to:
 # Todo:
 
 - [x] Mobile support!!!
+- [x] Improve indentation of current-note
 - [ ] Add support for changing inlinks, outlinks, to e.g. button, incoming links, outgoing links
 - [ ] Fix detailed view not closing in external / 2nd window 
 - [ ] Investigate and optimise. Currently, pLugin load time fluctates between 1ms and 15ms??
 - [ ] Better support with 'daily-nav-bar' plugin
-- [ ] Improve indentation of current-note
 - [ ] If 2 same notes open, then NavigationalLinks gonna show up only on 1 
-
+- [ ] notes deep inside the folder. improve layout
 
 ## Settings
 
