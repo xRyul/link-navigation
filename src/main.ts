@@ -367,12 +367,12 @@ export default class LinkNavigationPlugin extends Plugin {
     //     And fill it with inlinks, backlinks, canvas links information
     async renderDetailedView(containerEl: HTMLElement, file: TFile) {
         containerEl.empty();
-    
+
         const controlsEl = containerEl.createDiv('link-navigator-controls');
-    
+
         // Depth control and buttons wrapper
         const depthAndButtonsWrapper = controlsEl.createDiv('depth-and-buttons-wrapper');
-    
+
         // Depth control
         const depthControlEl = depthAndButtonsWrapper.createDiv('depth-control');
         depthControlEl.createSpan({ text: 'Depth: ' });
@@ -456,43 +456,33 @@ export default class LinkNavigationPlugin extends Plugin {
     //     - Inlinks will be rendered iteratively
     //     - Outlinks will be rendered recursively
     //     - Canvas Links will be rendered recursively (and allow to follow it up)
-    async renderLinkHierarchy(containerEl: HTMLElement, file: TFile) {
+    private async renderLinkHierarchy(containerEl: HTMLElement, file: TFile) {
+        containerEl.empty();
         const hierarchyUl = containerEl.createEl('ul');
     
-        // Get links from cache
         const cacheEntry = await this.cacheLinkData(file);
     
-        // Render inlinks iteratively with outlinks
-        await this.renderInlinksIterativelyWithOutlinks(file, hierarchyUl, this.maxDepth);
+        // Render inlinks and get the depth at which they end
+        const inlinksDepth = await this.renderInlinksIterativelyWithOutlinks(file, hierarchyUl, this.maxDepth);
     
-        // Render current note
+        // Calculate the indent for the current note based on the inlinks depth
+        const currentNoteIndent = inlinksDepth * 20; // Assuming 20px indent per level
+    
+        // Render current note with the calculated indent
         const currentLi = hierarchyUl.createEl('li', { cls: 'current-note' });
+        currentLi.style.marginLeft = `${currentNoteIndent}px`;
         currentLi.createEl('span', { text: '\u00A0\u00A0\u00A0 •\u00A0\u00A0' });
         currentLi.createEl('strong', { text: file.basename });
     
-        // Render outlinks recursively
+        // Render outlinks
         const outlinksUl = currentLi.createEl('ul', { cls: 'outlinks-list' });
-        await this.renderOutlinksRecursively(file, outlinksUl, this.maxDepth, new Set<string>());
+        // Always render at least one level of outlinks, but respect the max depth
+        const outlinksDepth = Math.max(1, this.maxDepth - inlinksDepth);
+        await this.renderOutlinksIteratively(file, outlinksUl, outlinksDepth);
     
-        // Render Canvas links if any and if showCanvasLinks is true
+        // Render Canvas links
         if (this.showCanvasLinks && cacheEntry.canvasLinks.length > 0) {
-            const canvasLi = hierarchyUl.createEl('li', { cls: 'canvas-links' });
-            canvasLi.createEl('strong', { text: 'Canvas Links' });
-            const canvasUl = canvasLi.createEl('ul');
-            cacheEntry.canvasLinks.forEach(link => {
-                const li = canvasUl.createEl('li');
-                const linkEl = li.createEl('a', { text: link, cls: 'internal-link' });
-                linkEl.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const canvasFile = this.app.vault.getAbstractFileByPath(`${link}.canvas`);
-                    if (canvasFile instanceof TFile) {
-                        this.app.workspace.getLeaf().openFile(canvasFile);
-                    } else {
-                        new Notice(`Canvas file not found: ${link}`);
-                    }
-                });
-            });
-
+            this.renderCanvasLinks(hierarchyUl, cacheEntry.canvasLinks);
         }
     }
     
@@ -552,15 +542,16 @@ export default class LinkNavigationPlugin extends Plugin {
     //     }
     // }
     // Search for Inlinks first, the outlinks of those inlinks
-    async renderInlinksIterativelyWithOutlinks(file: TFile, parentEl: HTMLElement, maxDepth: number) {
+    async renderInlinksIterativelyWithOutlinks(file: TFile, parentEl: HTMLElement, maxDepth: number): Promise<number> {
+        const inlinkQueue: { file: TFile; depth: number }[] = [{ file, depth: 0 }];
         const inlinkMap = new Map<string, { depth: number; file: TFile; outlinks: string[] }>();
-        const stack: { file: TFile; depth: number }[] = [{ file, depth: 0 }];
         const processedLinks: Set<string> = new Set();
+        let maxInlinkDepth = 0;
     
-        while (stack.length > 0) {
-            const popped = stack.pop();
-            if (!popped) continue;
-            const { file: currentFile, depth } = popped;
+        while (inlinkQueue.length > 0) {
+            const current = inlinkQueue.shift();
+            if (!current) continue;
+            const { file: currentFile, depth } = current;
             
             if (depth >= maxDepth || processedLinks.has(currentFile.path)) {
                 continue;
@@ -572,15 +563,13 @@ export default class LinkNavigationPlugin extends Plugin {
                 const sourceFile = this.app.metadataCache.getFirstLinkpathDest(inlink, '/');
                 if (sourceFile instanceof TFile && !processedLinks.has(sourceFile.path)) {
                     const inlinkCacheEntry = await this.cacheLinkData(sourceFile);
-                    const existingEntry = inlinkMap.get(sourceFile.path);
-                    if (!existingEntry || existingEntry.depth > depth + 1) {
-                        inlinkMap.set(sourceFile.path, { 
-                            depth: depth + 1, 
-                            file: sourceFile, 
-                            outlinks: inlinkCacheEntry.outlinks 
-                        });
-                        stack.push({ file: sourceFile, depth: depth + 1 });
-                    }
+                    inlinkMap.set(sourceFile.path, { 
+                        depth: depth + 1, 
+                        file: sourceFile, 
+                        outlinks: inlinkCacheEntry.outlinks 
+                    });
+                    inlinkQueue.push({ file: sourceFile, depth: depth + 1 });
+                    maxInlinkDepth = Math.max(maxInlinkDepth, depth + 1);
                 }
             }
         }
@@ -623,29 +612,88 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             }
         }
+    
+        return maxInlinkDepth; // Return the maximum depth of inlinks
     }
 
     // 3.3.2 Search for Outlinks and create indents (from fileCache, frontmatter & links in Canvas) 
-    async renderOutlinksRecursively(file: TFile, parentEl: HTMLElement, depth: number, processedLinks: Set<string>) {
-        if (depth <= 0 || file.extension === 'canvas') return;
+    // async renderOutlinksRecursively(file: TFile, parentEl: HTMLElement, depth: number, processedLinks: Set<string>) {
+    //     if (depth <= 0 || file.extension === 'canvas') return;
     
-        const cacheEntry = await this.cacheLinkData(file);
+    //     const cacheEntry = await this.cacheLinkData(file);
     
-        for (const outlink of cacheEntry.outlinks) {
-            const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, file.path);
-            if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
-                processedLinks.add(linkedFile.path);
-                const li = parentEl.createEl('li', { cls: 'outlink' });
-                li.createEl('span', { text: '→ ' });
-                const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    this.app.workspace.getLeaf().openFile(linkedFile);
-                });
-                const subUl = li.createEl('ul');
-                await this.renderOutlinksRecursively(linkedFile, subUl, depth - 1, processedLinks);
+    //     for (const outlink of cacheEntry.outlinks) {
+    //         const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, file.path);
+    //         if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
+    //             processedLinks.add(linkedFile.path);
+    //             const li = parentEl.createEl('li', { cls: 'outlink' });
+    //             li.createEl('span', { text: '→ ' });
+    //             const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
+    //             link.addEventListener('click', (e) => {
+    //                 e.preventDefault();
+    //                 this.app.workspace.getLeaf().openFile(linkedFile);
+    //             });
+    //             const subUl = li.createEl('ul');
+    //             await this.renderOutlinksRecursively(linkedFile, subUl, depth - 1, processedLinks);
+    //         }
+    //     }
+    // }
+    // 
+    async renderOutlinksIteratively(file: TFile, parentEl: HTMLElement, maxDepth: number) {
+        const queue: { file: TFile; depth: number; element: HTMLElement }[] = [{ file, depth: 0, element: parentEl }];
+        const processedLinks: Set<string> = new Set();
+    
+        while (queue.length > 0) {
+            const current = queue.shift();
+            if (!current) continue;
+            const { file: currentFile, depth, element: currentEl } = current;
+    
+            if (depth >= maxDepth || currentFile.extension === 'canvas' || processedLinks.has(currentFile.path)) {
+                continue;
+            }
+    
+            processedLinks.add(currentFile.path);
+            const cacheEntry = await this.cacheLinkData(currentFile);
+    
+            if (cacheEntry.outlinks.length > 0) {
+                const outlinksUl = currentEl.createEl('ul', { cls: 'outlink-outlinks' });
+    
+                for (const outlink of cacheEntry.outlinks) {
+                    const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, currentFile.path);
+                    if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
+                        const li = outlinksUl.createEl('li', { cls: 'outlink' });
+                        li.style.marginLeft = `${depth * 20}px`;
+                        li.createEl('span', { text: '→ ' });
+                        const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
+                        link.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            this.app.workspace.getLeaf().openFile(linkedFile);
+                        });
+                        queue.push({ file: linkedFile, depth: depth + 1, element: li });
+                    }
+                }
             }
         }
+    }
+
+    // 3.3.3 Render Canvas Links
+    private renderCanvasLinks(parentEl: HTMLElement, canvasLinks: string[]) {
+        const canvasLi = parentEl.createEl('li', { cls: 'canvas-links' });
+        canvasLi.createEl('strong', { text: 'Canvas Links' });
+        const canvasUl = canvasLi.createEl('ul');
+        canvasLinks.forEach(link => {
+            const li = canvasUl.createEl('li');
+            const linkEl = li.createEl('a', { text: link, cls: 'internal-link' });
+            linkEl.addEventListener('click', (e) => {
+                e.preventDefault();
+                const canvasFile = this.app.vault.getAbstractFileByPath(`${link}.canvas`);
+                if (canvasFile instanceof TFile) {
+                    this.app.workspace.getLeaf().openFile(canvasFile);
+                } else {
+                    new Notice(`Canvas file not found: ${link}`);
+                }
+            });
+        });
     }
 
     // 4. Adjust DetailedView window size depending on how small it is
