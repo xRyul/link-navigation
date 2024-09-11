@@ -338,7 +338,7 @@ export default class LinkNavigationPlugin extends Plugin {
         }
         this.detailsEl = view.containerEl.createEl('div', { cls: 'link-navigator-details-wrapper' });
         const detailsInner = this.detailsEl.createEl('div', { cls: 'link-navigator-details' });
-        detailsInner.style.display = 'none';
+        detailsInner.classList.toggle('hidden', !this.isDetailsVisible);
         
         view.containerEl.querySelector('.view-header')?.after(this.detailsEl);
     
@@ -346,16 +346,16 @@ export default class LinkNavigationPlugin extends Plugin {
             e.stopPropagation();
             this.isDetailsVisible = !this.isDetailsVisible;
             if (this.isDetailsVisible) {
-                detailsInner.style.display = 'block';
+                detailsInner.classList.remove('hidden');
                 await this.renderDetailedView(detailsInner, file);
-                setTimeout(() => {
+                requestAnimationFrame(() => {
                     detailsInner.classList.add('visible');
-                }, 10);
+                });
             } else {
                 detailsInner.classList.remove('visible');
                 setTimeout(() => {
-                    detailsInner.style.display = 'none';
-                }, 300);
+                    detailsInner.classList.add('hidden');
+                }, 300); // Match this with your transition duration
             }
         };
         
@@ -470,7 +470,7 @@ export default class LinkNavigationPlugin extends Plugin {
     
         // Render current note with the calculated indent
         const currentLi = hierarchyUl.createEl('li', { cls: 'current-note' });
-        currentLi.style.marginLeft = `${currentNoteIndent}px`;
+        currentLi.classList.add(`indent-${Math.floor(currentNoteIndent / 20)}`);
         currentLi.createEl('span', { text: '\u00A0\u00A0\u00A0 •\u00A0\u00A0' });
         currentLi.createEl('strong', { text: file.basename });
     
@@ -581,10 +581,10 @@ export default class LinkNavigationPlugin extends Plugin {
             const li = parentEl.createEl('li', { cls: 'inlink' });
             
             const indent = (maxFoundDepth - depth) * 20;
-            li.style.marginLeft = `${indent}px`;
+            li.classList.add(`indent-${Math.floor(indent / 20)}`);
     
             const arrowSpan = li.createEl('span', { text: '← ', cls: 'inlink-arrow' });
-            arrowSpan.style.marginRight = '5px';
+            arrowSpan.classList.add('inlink-arrow');
     
             const link = li.createEl('a', { text: sourceFile.basename, cls: 'internal-link' });
             link.addEventListener('click', (e) => {
@@ -662,7 +662,7 @@ export default class LinkNavigationPlugin extends Plugin {
                     const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, currentFile.path);
                     if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
                         const li = outlinksUl.createEl('li', { cls: 'outlink' });
-                        li.style.marginLeft = `${depth * 20}px`;
+                        li.classList.add(`indent-${depth}`);
                         li.createEl('span', { text: '→ ' });
                         const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
                         link.addEventListener('click', (e) => {
@@ -700,16 +700,16 @@ export default class LinkNavigationPlugin extends Plugin {
     adjustLayout_insideExpandedDetailedView(viewHeader: Element, viewHeaderTitle: Element) {
         const headerRect = viewHeader.getBoundingClientRect();
         const titleRect = viewHeaderTitle.getBoundingClientRect();
-
+    
         if (titleRect.left - headerRect.left < 100 || headerRect.right - titleRect.right < 100) {
             // Not enough space, move inlinks and outlinks below the title
-            if (this.inlinksEl) this.inlinksEl.style.order = '1';
-            if (this.outlinksEl) this.outlinksEl.style.order = '1';
-            viewHeader.addClass('link-navigator-vertical');
+            if (this.inlinksEl) this.inlinksEl.classList.add('order-1');
+            if (this.outlinksEl) this.outlinksEl.classList.add('order-1');
+            viewHeader.classList.add('link-navigator-vertical');
         } else {
-            if (this.inlinksEl) this.inlinksEl.style.order = '0';
-            if (this.outlinksEl) this.outlinksEl.style.order = '0';
-            viewHeader.removeClass('link-navigator-vertical');
+            if (this.inlinksEl) this.inlinksEl.classList.remove('order-1');
+            if (this.outlinksEl) this.outlinksEl.classList.remove('order-1');
+            viewHeader.classList.remove('link-navigator-vertical');
         }
     }
 
@@ -723,7 +723,7 @@ export default class LinkNavigationPlugin extends Plugin {
                 !detailsInner.contains(target) && 
                 !this.inlinksEl?.contains(target) && 
                 !this.outlinksEl?.contains(target)) {
-                detailsInner.style.display = 'none';
+                detailsInner.classList.add('hidden');
                 this.isDetailsVisible = false;
             }
         }

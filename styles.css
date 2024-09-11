@@ -23,6 +23,9 @@
     padding: 0.5em 0.8em;
     border-radius: 4px;
     transition: background-color 0.3s ease, color 0.3s ease;
+    order: 0;
+    z-index: 1001; /* Ensure these are above the details wrapper */
+    position: relative;
 }
 
 .link-navigator-inlinks:hover,
@@ -51,34 +54,56 @@
 }
 
 .link-navigator-details {
-    display: flex;
-    justify-content: space-between;
     background-color: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
     border-radius: 8px;
     padding: 20px;
     max-width: 80%;
-    max-height: 600px; /* Set a maximum height */
-    overflow-y: auto; /* Add vertical scrollbar if content overflows */
+    max-height: 600px;
+    overflow-y: auto;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     margin: 10px auto;
     opacity: 0;
+    visibility: hidden;
     transition: opacity 0.3s ease, transform 0.3s ease;
     transform: translateY(-10px);
     animation: fadeInUp 0.3s ease forwards;
 }
 
-
-
 .link-navigator-details.visible {
     opacity: 1;
     transform: translateY(0);
+    animation: fadeInUp 0.3s ease forwards;
+    visibility: visible;
 }
+
+
+
+.link-navigator-inlinks,
+.link-navigator-outlinks {
+    z-index: 1003; /* Ensure these are above the details wrapper and header */
+}
+
+.link-navigator-details-wrapper {
+    z-index: 1001; /* Below the header and link elements */
+}
+
+.link-navigator-content {
+    opacity: 1;
+    visibility: visible;
+}
+
+
 
 .link-navigator-vertical {
     flex-direction: column;
     align-items: flex-start;
 }
+
+.link-navigator-vertical .order-1 {
+    order: 1;
+}
+
 
 .link-navigator-vertical .link-navigator-inlinks,
 .link-navigator-vertical .link-navigator-outlinks {
@@ -170,6 +195,7 @@
 .link-hierarchy li {
     margin-bottom: 0.5em;
     position: relative;
+    transition: margin-left 0.3s ease; /* Smooth transition for indentation changes */
 }
 
 /* .link-hierarchy li::before {
@@ -243,6 +269,10 @@
 /* Add some space above the content in Reading mode */
 .markdown-reading-view .link-navigator-details-wrapper + .markdown-preview-view {
     margin-top: 60px;
+}
+
+.link-navigator-details.hidden {
+    display: none;
 }
 
 .link-navigator-details a.internal-link {
@@ -382,6 +412,18 @@
 
 .link-hierarchy-wrapper.show-outlinks .outlinks-list {
     display: block;
+}
+
+.indent-0 { margin-left: 0; }
+.indent-1 { margin-left: 20px; }
+.indent-2 { margin-left: 40px; }
+.indent-3 { margin-left: 60px; }
+.indent-4 { margin-left: 80px; }
+.indent-5 { margin-left: 100px; }
+
+/* Inlink arrow styling */
+.inlink-arrow {
+    margin-right: 5px;
 }
 
 @keyframes slideIn {
