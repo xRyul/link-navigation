@@ -338,7 +338,8 @@ export default class LinkNavigationPlugin extends Plugin {
         }
         this.detailsEl = view.containerEl.createEl('div', { cls: 'link-navigator-details-wrapper' });
         const detailsInner = this.detailsEl.createEl('div', { cls: 'link-navigator-details' });
-        detailsInner.style.display = 'none';
+        // detailsInner.style.display = 'none';
+        detailsInner.classList.add('hidden');
         
         view.containerEl.querySelector('.view-header')?.after(this.detailsEl);
     
@@ -581,11 +582,12 @@ export default class LinkNavigationPlugin extends Plugin {
             const li = parentEl.createEl('li', { cls: 'inlink' });
             
             const indent = (maxFoundDepth - depth) * 20;
-            li.style.marginLeft = `${indent}px`;
+            li.style.marginLeft = `${indent}px`; // needed for correct inlink indentation
     
             const arrowSpan = li.createEl('span', { text: '← ', cls: 'inlink-arrow' });
-            arrowSpan.style.marginRight = '5px';
-    
+            // arrowSpan.style.marginRight = '5px';
+            arrowSpan.classList.add('inlink-arrow');
+            
             const link = li.createEl('a', { text: sourceFile.basename, cls: 'internal-link' });
             link.addEventListener('click', (e) => {
                 e.preventDefault();

@@ -8,6 +8,9 @@
         transform: translateY(0);
     }
 }
+.inlink-arrow { 
+    margin-right: 5px;
+}
 
 .view-header {
     display: flex;
@@ -68,7 +71,9 @@
     animation: fadeInUp 0.3s ease forwards;
 }
 
-
+.link-navigator-details.hidden {
+    display: none;
+}
 
 .link-navigator-details.visible {
     opacity: 1;
