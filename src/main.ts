@@ -97,12 +97,14 @@ export default class LinkNavigationPlugin extends Plugin {
         // Clears Cache and Promises
         this.cache.clear();
         this.loadingPromises.clear();
+        this.dirtyCache.clear();
 
         // Remove periodic cache cleanup interval
         if (this.cacheCleanupInterval !== null) {
             clearInterval(this.cacheCleanupInterval);
             this.cacheCleanupInterval = null;
         }
+        
     }
 
     async loadSettings() {
@@ -118,12 +120,7 @@ export default class LinkNavigationPlugin extends Plugin {
         if (forceRefresh) {
             this.invalidateCache(file);
         }
-
-        // if (this.inlinksEl && this.outlinksEl) {
-        //     this.inlinksEl.textContent = 'Loading...';
-        //     this.outlinksEl.textContent = 'Loading...';
-        // }
-
+    
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || !(view instanceof MarkdownView)) return;
     
@@ -135,27 +132,22 @@ export default class LinkNavigationPlugin extends Plugin {
     
         this.removeLinkNavigation();
     
-        // Create placeholder elements
-        this.inlinksEl = viewHeader.createEl('div', { cls: 'link-navigator-inlinks' });
-        this.outlinksEl = viewHeader.createEl('div', { cls: 'link-navigator-outlinks' });
-        this.inlinksEl.textContent = 'Loading...';
-        this.outlinksEl.textContent = 'Loading...';
+        // Create elements
+        this.inlinksEl = viewHeader.createEl('div', { cls: 'link-navigator-inlinks link-navigator-visible' });
+        this.outlinksEl = viewHeader.createEl('div', { cls: 'link-navigator-outlinks link-navigator-visible' });
+        this.inlinksEl.textContent = 'INLINKS (0)';
+        this.outlinksEl.textContent = 'OUTLINKS (0)';
         viewHeaderTitle.before(this.inlinksEl);
         viewHeaderTitle.after(this.outlinksEl);
     
         try {
             const { inlinks, outlinks, canvasLinks } = await this.cacheLinkData(file);
     
-            // Use requestAnimationFrame for DOM updates
             requestAnimationFrame(() => {
                 if (this.inlinksEl && this.outlinksEl) {
                     const totalOutlinks = outlinks.length + canvasLinks.length;
                     this.inlinksEl.textContent = `← INLINKS (${inlinks.length})`;
                     this.outlinksEl.textContent = `OUTLINKS (${totalOutlinks}) →`;
-    
-                    // Hide elements if there are no links
-                    this.inlinksEl.style.display = inlinks.length === 0 ? 'none' : 'inline-block';
-                    this.outlinksEl.style.display = totalOutlinks === 0 ? 'none' : 'inline-block';
     
                     this.setupHoverPreview(this.inlinksEl, inlinks, 'Inlinks');
                     this.setupHoverPreview(this.outlinksEl, [...outlinks, ...canvasLinks], 'Outlinks');
@@ -165,20 +157,19 @@ export default class LinkNavigationPlugin extends Plugin {
                 this.adjustLayout_insideExpandedDetailedView(viewHeader, viewHeaderTitle);
             });
     
-            // Add click event listener to collapse details when clicking outside
             document.addEventListener('click', this.handleClickOutside);
         } catch (error) {
             console.error('Error updating link navigator:', error);
             requestAnimationFrame(() => {
                 if (this.inlinksEl && this.outlinksEl) {
-                    this.inlinksEl.textContent = 'No inlinks';
-                    this.outlinksEl.textContent = 'No outlinks';
-                    this.inlinksEl.style.display = 'none';
-                    this.outlinksEl.style.display = 'none';
+                    this.inlinksEl.textContent = 'INLINKS (0)';
+                    this.outlinksEl.textContent = 'OUTLINKS (0)';
+                    // Still show elements even if there are no links
+                    this.inlinksEl.classList.add('link-navigator-visible');
+                    this.outlinksEl.classList.add('link-navigator-visible');
                 }
             });
         }
-    
     }
 
     // 1.1 CLeanup the DOM before rendering anything, and nullify: inlinksEl, outlinksEl, detailsEl
