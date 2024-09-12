@@ -338,7 +338,6 @@ export default class LinkNavigationPlugin extends Plugin {
         }
         this.detailsEl = view.containerEl.createEl('div', { cls: 'link-navigator-details-wrapper' });
         const detailsInner = this.detailsEl.createEl('div', { cls: 'link-navigator-details' });
-        // detailsInner.style.display = 'none';
         detailsInner.classList.add('hidden');
         
         view.containerEl.querySelector('.view-header')?.after(this.detailsEl);
@@ -664,7 +663,7 @@ export default class LinkNavigationPlugin extends Plugin {
                     const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, currentFile.path);
                     if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
                         const li = outlinksUl.createEl('li', { cls: 'outlink' });
-                        li.style.marginLeft = `${depth * 20}px`;
+                        li.style.marginLeft = `${depth}px`;
                         li.createEl('span', { text: '→ ' });
                         const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
                         link.addEventListener('click', (e) => {

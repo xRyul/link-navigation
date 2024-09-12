@@ -18,6 +18,10 @@
     flex-wrap: wrap;
 }
 
+.outlink-outlinks {
+    padding-left: 20px;
+}
+
 .link-navigator-inlinks,
 .link-navigator-outlinks {
     font-size: 0.9em;
