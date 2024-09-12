@@ -109,10 +109,10 @@ export default class LinkNavigationPlugin extends Plugin {
             this.invalidateCache(file);
         }
 
-        if (this.inlinksEl && this.outlinksEl) {
-            this.inlinksEl.textContent = 'Loading...';
-            this.outlinksEl.textContent = 'Loading...';
-        }
+        // if (this.inlinksEl && this.outlinksEl) {
+        //     this.inlinksEl.textContent = 'Loading...';
+        //     this.outlinksEl.textContent = 'Loading...';
+        // }
 
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || !(view instanceof MarkdownView)) return;
@@ -138,17 +138,15 @@ export default class LinkNavigationPlugin extends Plugin {
     
             // Use requestAnimationFrame for DOM updates
             requestAnimationFrame(() => {
-                // Check if counts have changed before updating
                 if (this.inlinksEl && this.outlinksEl) {
-                    const currentInlinkCount = parseInt(this.inlinksEl.textContent?.match(/\d+/)?.[0] ?? '0');
-                    const currentOutlinkCount = parseInt(this.outlinksEl.textContent?.match(/\d+/)?.[0] ?? '0');
-                    // Include canvas links in the outlink count
                     const totalOutlinks = outlinks.length + canvasLinks.length;
-                    if (inlinks.length === currentInlinkCount && totalOutlinks === currentOutlinkCount && !forceRefresh) {
-                        return; // No changes, no need to update
-                    }
                     this.inlinksEl.textContent = `← INLINKS (${inlinks.length})`;
                     this.outlinksEl.textContent = `OUTLINKS (${totalOutlinks}) →`;
+    
+                    // Hide elements if there are no links
+                    this.inlinksEl.style.display = inlinks.length === 0 ? 'none' : 'inline-block';
+                    this.outlinksEl.style.display = totalOutlinks === 0 ? 'none' : 'inline-block';
+    
                     this.setupHoverPreview(this.inlinksEl, inlinks, 'Inlinks');
                     this.setupHoverPreview(this.outlinksEl, [...outlinks, ...canvasLinks], 'Outlinks');
                 }
@@ -163,11 +161,14 @@ export default class LinkNavigationPlugin extends Plugin {
             console.error('Error updating link navigator:', error);
             requestAnimationFrame(() => {
                 if (this.inlinksEl && this.outlinksEl) {
-                    this.inlinksEl.textContent = 'Error loading inlinks';
-                    this.outlinksEl.textContent = 'Error loading outlinks';
+                    this.inlinksEl.textContent = 'No inlinks';
+                    this.outlinksEl.textContent = 'No outlinks';
+                    this.inlinksEl.style.display = 'none';
+                    this.outlinksEl.style.display = 'none';
                 }
             });
         }
+    
     }
 
     // 1.1 CLeanup the DOM before rendering anything, and nullify: inlinksEl, outlinksEl, detailsEl
@@ -298,7 +299,8 @@ export default class LinkNavigationPlugin extends Plugin {
 
     // 2. Allow user to hover over the LinkNavigation and get a preview
     setupHoverPreview(element: HTMLElement, links: string[], title: string) {
-        
+        if (links.length === 0) return; // Don't set up hover preview for empty links
+    
         let hoverTimeout: TimeoutId;
         let menu: Menu | null = null;
         
@@ -351,17 +353,19 @@ export default class LinkNavigationPlugin extends Plugin {
                 await this.renderDetailedView(detailsInner, file);
             } else {
                 detailsInner.classList.remove('visible');
-                // The transition will handle the fade-out
-                setTimeout(() => {
-                    if (!this.isDetailsVisible) {
-                        detailsInner.classList.add('hidden');
-                    }
-                }, 300);
+                if (!this.isDetailsVisible) {
+                    detailsInner.classList.add('hidden');
+                }
             }
         };
         
-        this.inlinksEl?.addEventListener('click', toggleDetails);
-        this.outlinksEl?.addEventListener('click', toggleDetails);
+        // Only add event listeners if there are links
+        if (this.inlinksEl && this.inlinksEl.style.display !== 'none') {
+            this.inlinksEl.addEventListener('click', toggleDetails);
+        }
+        if (this.outlinksEl && this.outlinksEl.style.display !== 'none') {
+            this.outlinksEl.addEventListener('click', toggleDetails);
+        }
     }
     
     
@@ -705,17 +709,15 @@ export default class LinkNavigationPlugin extends Plugin {
     adjustLayout_insideExpandedDetailedView(viewHeader: Element, viewHeaderTitle: Element) {
         const headerRect = viewHeader.getBoundingClientRect();
         const titleRect = viewHeaderTitle.getBoundingClientRect();
-
-        if (titleRect.left - headerRect.left < 100 || headerRect.right - titleRect.right < 100) {
-            // Not enough space, move inlinks and outlinks below the title
-            if (this.inlinksEl) this.inlinksEl.style.order = '1';
-            if (this.outlinksEl) this.outlinksEl.style.order = '1';
-            viewHeader.addClass('link-navigator-vertical');
-        } else {
-            if (this.inlinksEl) this.inlinksEl.style.order = '0';
-            if (this.outlinksEl) this.outlinksEl.style.order = '0';
-            viewHeader.removeClass('link-navigator-vertical');
-        }
+        const availableWidth = headerRect.width;
+        const titleWidth = titleRect.width;
+        const inlinksWidth = this.inlinksEl?.offsetWidth || 0;
+        const outlinksWidth = this.outlinksEl?.offsetWidth || 0;
+    
+        const totalWidth = inlinksWidth + titleWidth + outlinksWidth;
+        const isCompact = totalWidth > availableWidth * 0.9; // 90% threshold
+    
+        viewHeader.classList.toggle('link-navigator-compact', isCompact);
     }
 
     // 5. Collapse DetailedView. This method will check if the click occurred 

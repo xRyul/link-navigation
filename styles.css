@@ -19,6 +19,7 @@
 .inlink-indent-3 { --inlink-note-indent: 60px; }
 .inlink-indent-4 { --inlink-note-indent: 80px; }
 .inlink-indent-5 { --inlink-note-indent: 100px; }
+.inlink-indent-6 { --inlink-note-indent: 120px; }
 .inlink-indent-7 { --inlink-note-indent: 140px; }
 .inlink-indent-8 { --inlink-note-indent: 160px; }
 .inlink-indent-9 { --inlink-note-indent: 180px; }
@@ -80,6 +81,7 @@
 .current-note {
     margin-left: var(--current-note-indent, 0);
 }
+
 
 @keyframes fadeInUp {
     0% {
