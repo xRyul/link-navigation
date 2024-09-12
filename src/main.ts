@@ -61,6 +61,7 @@ export default class LinkNavigationPlugin extends Plugin {
             })
         );
         
+        // Following makes header blink. Look into better options to detect change.
         // To update the DetailedView when new links are created, we'll need 
         // to listen for file changes and update the cache accordingly.
         // this.registerEvent(
@@ -76,7 +77,16 @@ export default class LinkNavigationPlugin extends Plugin {
         //         }
         //     })
         // );
-
+        this.addCommand({
+            id: 'force-refresh-link-navigation',
+            name: 'Force Refresh Link Navigation',
+            callback: () => {
+                const activeFile = this.app.workspace.getActiveFile();
+                if (activeFile) {
+                    this.updateLinkNavigation(activeFile, true);
+                }
+            }
+        });
         this.setupCacheCleanup();
 
     }
