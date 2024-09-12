@@ -1,3 +1,87 @@
+:root {
+    --current-note-indent: 0px;
+    --inlink-note-indent: 0px;
+    --outlink-note-indent: 0px;
+}
+
+.outlink-depth-0 { --outlink-note-indent: 0; }
+.outlink-depth-1 { --outlink-note-indent: 10px; }
+.outlink-depth-2 { --outlink-note-indent: 20px; }
+.outlink-depth-3 { --outlink-note-indent: 30px; }
+.outlink-depth-4 { --outlink-note-indent: 40px; }
+.outlink {
+    margin-left: var(--inlink-note-indent, 0);
+}
+
+.inlink-indent-0 { --inlink-note-indent: 0px; }
+.inlink-indent-1 { --inlink-note-indent: 20px; }
+.inlink-indent-2 { --inlink-note-indent: 40px; }
+.inlink-indent-3 { --inlink-note-indent: 60px; }
+.inlink-indent-4 { --inlink-note-indent: 80px; }
+.inlink-indent-5 { --inlink-note-indent: 100px; }
+.inlink-indent-6 { --inlink-note-indent: 120px; }
+.inlink-indent-7 { --inlink-note-indent: 140px; }
+.inlink-indent-8 { --inlink-note-indent: 160px; }
+.inlink-indent-9 { --inlink-note-indent: 180px; }
+.inlink-indent-10 { --inlink-note-indent: 200px; }
+.inlink-indent-11 { --inlink-note-indent: 220px; }
+.inlink-indent-12 { --inlink-note-indent: 240px; }
+.inlink-indent-13 { --inlink-note-indent: 260px; }
+.inlink-indent-14 { --inlink-note-indent: 280px; }
+.inlink-indent-15 { --inlink-note-indent: 300px; }
+.inlink-indent-16 { --inlink-note-indent: 320px; }
+.inlink-indent-17 { --inlink-note-indent: 340px; }
+.inlink-indent-18 { --inlink-note-indent: 360px; }
+.inlink-indent-19 { --inlink-note-indent: 380px; }
+.inlink-indent-20 { --inlink-note-indent: 400px; }
+.inlink-indent-21 { --inlink-note-indent: 420px; }
+.inlink-indent-22 { --inlink-note-indent: 440px; }
+.inlink-indent-23 { --inlink-note-indent: 460px; }
+.inlink-indent-24 { --inlink-note-indent: 480px; }
+.inlink-indent-25 { --inlink-note-indent: 500px; }
+.inlink-indent-26 { --inlink-note-indent: 520px; }
+.inlink-indent-27 { --inlink-note-indent: 540px; }
+.inlink-indent-28 { --inlink-note-indent: 560px; }
+.inlink-indent-29 { --inlink-note-indent: 580px; }
+.inlink-indent-30 { --inlink-note-indent: 600px; }
+.inlink-indent-31 { --inlink-note-indent: 620px; }
+.inlink-indent-32 { --inlink-note-indent: 640px; }
+.inlink-indent-33 { --inlink-note-indent: 660px; }
+.inlink-indent-34 { --inlink-note-indent: 680px; }
+.inlink-indent-35 { --inlink-note-indent: 700px; }
+.inlink-indent-36 { --inlink-note-indent: 720px; }
+.inlink-indent-37 { --inlink-note-indent: 740px; }
+.inlink-indent-38 { --inlink-note-indent: 760px; }
+.inlink-indent-39 { --inlink-note-indent: 780px; }
+.inlink-indent-40 { --inlink-note-indent: 800px; }
+.inlink {
+    margin-left: var(--inlink-note-indent, 0);
+}
+
+.indent-0 { --current-note-indent: 0px; }
+.indent-1 { --current-note-indent: 20px; }
+.indent-2 { --current-note-indent: 40px; }
+.indent-3 { --current-note-indent: 60px; }
+.indent-4 { --current-note-indent: 80px; }
+.indent-5 { --current-note-indent: 100px; }
+.indent-6 { --current-note-indent: 120px; }
+.indent-7 { --current-note-indent: 140px; }
+.indent-8 { --current-note-indent: 160px; }
+.indent-9 { --current-note-indent: 180px; }
+.indent-10 { --current-note-indent: 200px; }
+.indent-11 { --current-note-indent: 220px; }
+.indent-12 { --current-note-indent: 240px; }
+.indent-13 { --current-note-indent: 260px; }
+.indent-14 { --current-note-indent: 280px; }
+.indent-15 { --current-note-indent: 300px; }
+.indent-16 { --current-note-indent: 320px; }
+.indent-17 { --current-note-indent: 340px; }
+.indent-18 { --current-note-indent: 360px; }
+.indent-19 { --current-note-indent: 380px; }
+.current-note {
+    margin-left: var(--current-note-indent, 0);
+}
+
 @keyframes fadeInUp {
     0% {
         opacity: 0;
@@ -8,6 +92,7 @@
         transform: translateY(0);
     }
 }
+
 .inlink-arrow { 
     margin-right: 5px;
 }
@@ -82,6 +167,7 @@
 .link-navigator-details.visible {
     opacity: 1;
     transform: translateY(0);
+    display: block;
 }
 
 .link-navigator-vertical {

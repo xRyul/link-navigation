@@ -346,15 +346,16 @@ export default class LinkNavigationPlugin extends Plugin {
             e.stopPropagation();
             this.isDetailsVisible = !this.isDetailsVisible;
             if (this.isDetailsVisible) {
-                detailsInner.style.display = 'block';
+                detailsInner.classList.remove('hidden');
+                detailsInner.classList.add('visible');
                 await this.renderDetailedView(detailsInner, file);
-                setTimeout(() => {
-                    detailsInner.classList.add('visible');
-                }, 10);
             } else {
                 detailsInner.classList.remove('visible');
+                // The transition will handle the fade-out
                 setTimeout(() => {
-                    detailsInner.style.display = 'none';
+                    if (!this.isDetailsVisible) {
+                        detailsInner.classList.add('hidden');
+                    }
                 }, 300);
             }
         };
@@ -362,6 +363,9 @@ export default class LinkNavigationPlugin extends Plugin {
         this.inlinksEl?.addEventListener('click', toggleDetails);
         this.outlinksEl?.addEventListener('click', toggleDetails);
     }
+    
+    
+    
 
     // 3.1 Render DetailedView elements: Depth, Refresh button, Canvas Links toggle button.
     //     And fill it with inlinks, backlinks, canvas links information
@@ -466,11 +470,13 @@ export default class LinkNavigationPlugin extends Plugin {
         const inlinksDepth = await this.renderInlinksIterativelyWithOutlinks(file, hierarchyUl, this.maxDepth);
     
         // Calculate the indent for the current note based on the inlinks depth
-        const currentNoteIndent = inlinksDepth * 20; // Assuming 20px indent per level
+        // const currentNoteIndent = inlinksDepth * 20; // Assuming 20px indent per level
     
         // Render current note with the calculated indent
-        const currentLi = hierarchyUl.createEl('li', { cls: 'current-note' });
-        currentLi.style.marginLeft = `${currentNoteIndent}px`;
+        const indentLevel = inlinksDepth;
+        const currentLi = hierarchyUl.createEl('li', { 
+            cls: `current-note indent-${indentLevel}` 
+        });
         currentLi.createEl('span', { text: '\u00A0\u00A0\u00A0 •\u00A0\u00A0' });
         currentLi.createEl('strong', { text: file.basename });
     
@@ -578,15 +584,13 @@ export default class LinkNavigationPlugin extends Plugin {
         const maxFoundDepth = Math.max(...sortedInlinks.map(([, { depth }]) => depth));
     
         for (const [, { depth, file: sourceFile, outlinks }] of sortedInlinks) {
-            const li = parentEl.createEl('li', { cls: 'inlink' });
-            
-            const indent = (maxFoundDepth - depth) * 20;
-            li.style.marginLeft = `${indent}px`; // needed for correct inlink indentation
+            const indent = maxFoundDepth - depth;
+            const li = parentEl.createEl('li', { 
+                cls: `inlink inlink-indent-${indent}`
+            });
     
-            const arrowSpan = li.createEl('span', { text: '← ', cls: 'inlink-arrow' });
-            // arrowSpan.style.marginRight = '5px';
-            arrowSpan.classList.add('inlink-arrow');
-            
+            li.createEl('span', { text: '← ', cls: 'inlink-arrow' });
+
             const link = li.createEl('a', { text: sourceFile.basename, cls: 'internal-link' });
             link.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -662,8 +666,8 @@ export default class LinkNavigationPlugin extends Plugin {
                 for (const outlink of cacheEntry.outlinks) {
                     const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, currentFile.path);
                     if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
-                        const li = outlinksUl.createEl('li', { cls: 'outlink' });
-                        li.style.marginLeft = `${depth}px`;
+                    const li = outlinksUl.createEl('li', { cls: `outlink outlink-depth-${depth}` });
+                        
                         li.createEl('span', { text: '→ ' });
                         const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
                         link.addEventListener('click', (e) => {
@@ -724,8 +728,13 @@ export default class LinkNavigationPlugin extends Plugin {
                 !detailsInner.contains(target) && 
                 !this.inlinksEl?.contains(target) && 
                 !this.outlinksEl?.contains(target)) {
-                detailsInner.style.display = 'none';
+                detailsInner.classList.remove('visible');
                 this.isDetailsVisible = false;
+
+                if (!this.isDetailsVisible) {
+                        detailsInner.classList.add('hidden');
+                }
+                
             }
         }
     };
