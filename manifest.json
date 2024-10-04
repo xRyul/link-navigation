@@ -1,7 +1,7 @@
 {
 	"id": "link-navigation",
 	"name": "Link Navigation",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"minAppVersion": "0.15.0",
 	"description": "Navigate between incoming links (inlinks), outgoing links (outlinks) N levels deep. Links from Canvas are also supported.",
 	"author": "xRyul",
