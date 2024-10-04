@@ -79,7 +79,7 @@ export default class LinkNavigationPlugin extends Plugin {
         // );
         this.addCommand({
             id: 'force-refresh-link-navigation',
-            name: 'Force Refresh Link Navigation',
+            name: 'Force refresh link navigation',
             callback: () => {
                 const activeFile = this.app.workspace.getActiveFile();
                 if (activeFile) {
@@ -409,7 +409,7 @@ export default class LinkNavigationPlugin extends Plugin {
     
         // Canvas Links toggle
         const canvasLinksToggle = new ButtonComponent(buttonContainer)
-            .setButtonText('Canvas Links')
+            .setButtonText('Canvas links')
             .setClass('canvas-links-toggle')
             .onClick(async () => {
                 this.showCanvasLinks = !this.showCanvasLinks;
@@ -430,7 +430,7 @@ export default class LinkNavigationPlugin extends Plugin {
         // Add Outlinks of Inlinks toggle button
         const outlinksOfInlinksToggle = new ButtonComponent(buttonContainer)
             .setIcon('git-branch')
-            .setTooltip('Toggle Outlinks of Inlinks')
+            .setTooltip('Toggle outlinks of inlinks')
             .onClick(() => {
                 this.outlinksOfInlinksVisible = !this.outlinksOfInlinksVisible;
                 outlinksOfInlinksToggle.buttonEl.classList.toggle('active');
@@ -689,7 +689,7 @@ export default class LinkNavigationPlugin extends Plugin {
     // 3.3.3 Render Canvas Links
     private renderCanvasLinks(parentEl: HTMLElement, canvasLinks: string[]) {
         const canvasLi = parentEl.createEl('li', { cls: 'canvas-links' });
-        canvasLi.createEl('strong', { text: 'Canvas Links' });
+        canvasLi.createEl('strong', { text: 'Canvas links' });
         const canvasUl = canvasLi.createEl('ul');
         canvasLinks.forEach(link => {
             const li = canvasUl.createEl('li');
@@ -790,11 +790,11 @@ export default class LinkNavigationPlugin extends Plugin {
             const oldestEntry = cacheEntries.sort(([, a], [, b]) => a.timestamp - b.timestamp)[0][1];
             const newestEntry = cacheEntries.sort(([, a], [, b]) => b.timestamp - a.timestamp)[0][1];
 
-            const message = `Cache Size: ${cacheSize} entries\n`
-                + `Cache Timeout: ${cacheTimeout} minutes\n`
-                + `Oldest Entry: ${oldestEntry?.timestamp ? new Date(oldestEntry.timestamp).toLocaleString() : 'N/A'}\n`
-                + `Newest Entry: ${newestEntry?.timestamp ? new Date(newestEntry.timestamp).toLocaleString() : 'N/A'}\n`
-                + `Dirty Cache Entries: ${this.dirtyCache.size}`;
+            const message = `Cache size: ${cacheSize} entries\n`
+                + `Cache timeout: ${cacheTimeout} minutes\n`
+                + `Oldest entry: ${oldestEntry?.timestamp ? new Date(oldestEntry.timestamp).toLocaleString() : 'N/A'}\n`
+                + `Newest entry: ${newestEntry?.timestamp ? new Date(newestEntry.timestamp).toLocaleString() : 'N/A'}\n`
+                + `Dirty cache entries: ${this.dirtyCache.size}`;
 
             new Notice(message);
         } else {
@@ -845,7 +845,7 @@ class LinkNavigationSettingTab extends PluginSettingTab {
         containerEl.empty();
 
         new Setting(containerEl)
-            .setName('Search Canvas Links')
+            .setName('Search canvas links')
             .setDesc('Enable or disable searching for links in Canvas files')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.searchCanvasLinks)
@@ -855,7 +855,7 @@ class LinkNavigationSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Cache Timeout')
+            .setName('Cache timeout')
             .setDesc('Time (in minutes) before cached data is considered stale')
             .addText(text => text
                 .setPlaceholder('Enter cache timeout')
@@ -869,7 +869,7 @@ class LinkNavigationSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Cache Cleanup Interval')
+            .setName('Cache cleanup interval')
             .setDesc('Set the interval (in minutes) for cleaning up the cache')
             .addText(text => text
                 .setPlaceholder('Enter cache cleanup interval (minutes)')
@@ -885,7 +885,7 @@ class LinkNavigationSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName('Cache Status')
+            .setName('Cache status')
             .setDesc('Display the current cache status')
             .addButton((btn) => {
                 btn.setButtonText('Show Cache Status')
@@ -895,7 +895,7 @@ class LinkNavigationSettingTab extends PluginSettingTab {
             });
             
         new Setting(containerEl)
-            .setName('Rebuild Cache')
+            .setName('Rebuild cache')
             .setDesc('Manually rebuild the cache')
             .addButton((btn) => {
                 btn.setButtonText('Rebuild Cache')
@@ -904,7 +904,7 @@ class LinkNavigationSettingTab extends PluginSettingTab {
                     });
             });
         new Setting(containerEl)
-            .setName('Show Cache Cleanup Notice')
+            .setName('Show cache cleanup notice')
             .setDesc('Display a notice when the cache is being cleaned up')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.showCacheCleanupNotice)
