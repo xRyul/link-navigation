@@ -638,9 +638,13 @@ export default class LinkNavigationPlugin extends Plugin {
             li.createEl('span', { text: '← ', cls: 'inlink-arrow' });
 
             const link = li.createEl('a', { text: sourceFile.basename, cls: 'internal-link' });
-            link.addEventListener('click', (e) => {
+            link.addEventListener('click', async (e) => {
                 e.preventDefault();
-                this.app.workspace.getLeaf().openFile(sourceFile);
+                if (e.metaKey || e.ctrlKey) {
+                    await this.openInNewLeaf(sourceFile);
+                } else {
+                    this.app.workspace.getLeaf().openFile(sourceFile);
+                }
             });
     
             // Add outlinks (initially hidden)
@@ -653,11 +657,15 @@ export default class LinkNavigationPlugin extends Plugin {
                     const outLi = outlinksUl.createEl('li');
                     outLi.createEl('span', { text: '→ ' });
                     const outLink = outLi.createEl('a', { text: outlink, cls: 'internal-link' });
-                    outLink.addEventListener('click', (e) => {
+                    outLink.addEventListener('click', async (e) => {
                         e.preventDefault();
                         const outlinkFile = this.app.metadataCache.getFirstLinkpathDest(outlink, '/');
                         if (outlinkFile instanceof TFile) {
-                            this.app.workspace.getLeaf().openFile(outlinkFile);
+                            if (e.metaKey || e.ctrlKey) {
+                                await this.openInNewLeaf(outlinkFile);
+                            } else {
+                                this.app.workspace.getLeaf().openFile(outlinkFile);
+                            }
                         }
                     });
                 }
@@ -665,6 +673,13 @@ export default class LinkNavigationPlugin extends Plugin {
         }
     
         return maxInlinkDepth; // Return the maximum depth of inlinks
+    }
+
+
+    // 3.3.1.1 Helper method to add to the class to handle the CMD/Ctrl click behavior
+    private async openInNewLeaf(file: TFile) {
+        const leaf = this.app.workspace.getLeaf('tab');
+        await leaf.openFile(file, { active: false });
     }
 
     // 3.3.2 Search for Outlinks and create indents (from fileCache, frontmatter & links in Canvas) 
@@ -716,9 +731,13 @@ export default class LinkNavigationPlugin extends Plugin {
                         
                         li.createEl('span', { text: '→ ' });
                         const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
-                        link.addEventListener('click', (e) => {
+                        link.addEventListener('click', async (e) => {
                             e.preventDefault();
-                            this.app.workspace.getLeaf().openFile(linkedFile);
+                            if (e.metaKey || e.ctrlKey) {
+                                await this.openInNewLeaf(linkedFile);
+                            } else {
+                                this.app.workspace.getLeaf().openFile(linkedFile);
+                            }
                         });
                         queue.push({ file: linkedFile, depth: depth + 1, element: li });
                     }
@@ -735,11 +754,15 @@ export default class LinkNavigationPlugin extends Plugin {
         canvasLinks.forEach(link => {
             const li = canvasUl.createEl('li');
             const linkEl = li.createEl('a', { text: link, cls: 'internal-link' });
-            linkEl.addEventListener('click', (e) => {
+            linkEl.addEventListener('click', async (e) => {
                 e.preventDefault();
                 const canvasFile = this.app.vault.getAbstractFileByPath(`${link}.canvas`);
                 if (canvasFile instanceof TFile) {
-                    this.app.workspace.getLeaf().openFile(canvasFile);
+                    if (e.metaKey || e.ctrlKey) {
+                        await this.openInNewLeaf(canvasFile);
+                    } else {
+                        this.app.workspace.getLeaf().openFile(canvasFile);
+                    }
                 } else {
                     new Notice(`Canvas file not found: ${link}`);
                 }
