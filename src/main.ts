@@ -125,7 +125,8 @@ export default class LinkNavigationPlugin extends Plugin {
         if (!view || !(view instanceof MarkdownView)) return;
     
         const viewHeader = view.containerEl.querySelector('.view-header');
-        if (!viewHeader) return;
+        const viewContent = view.containerEl.querySelector('.view-content');
+        if (!viewHeader || !viewContent) return;
     
         const viewHeaderTitle = viewHeader.querySelector('.view-header-title');
         if (!viewHeaderTitle) return;
@@ -133,12 +134,23 @@ export default class LinkNavigationPlugin extends Plugin {
         this.removeLinkNavigation();
     
         // Create elements
-        this.inlinksEl = viewHeader.createEl('div', { cls: 'link-navigator-inlinks link-navigator-visible' });
-        this.outlinksEl = viewHeader.createEl('div', { cls: 'link-navigator-outlinks link-navigator-visible' });
+        this.inlinksEl = document.createElement('div');
+        this.outlinksEl = document.createElement('div');
+        this.inlinksEl.classList.add('link-navigator-inlinks', 'link-navigator-visible');
+        this.outlinksEl.classList.add('link-navigator-outlinks', 'link-navigator-visible');
         this.inlinksEl.textContent = 'INLINKS (0)';
         this.outlinksEl.textContent = 'OUTLINKS (0)';
+    
+        // Create mobile container
+        const mobileContainer = document.createElement('div');
+        mobileContainer.classList.add('mobile-link-navigator');
+        mobileContainer.appendChild(this.inlinksEl.cloneNode(true));
+        mobileContainer.appendChild(this.outlinksEl.cloneNode(true));
+    
+        // Add to both desktop and mobile locations
         viewHeaderTitle.before(this.inlinksEl);
         viewHeaderTitle.after(this.outlinksEl);
+        viewContent.prepend(mobileContainer);
     
         try {
             const { inlinks, outlinks, canvasLinks } = await this.cacheLinkData(file);
@@ -146,11 +158,31 @@ export default class LinkNavigationPlugin extends Plugin {
             requestAnimationFrame(() => {
                 if (this.inlinksEl && this.outlinksEl) {
                     const totalOutlinks = outlinks.length + canvasLinks.length;
-                    this.inlinksEl.textContent = `← INLINKS (${inlinks.length})`;
-                    this.outlinksEl.textContent = `OUTLINKS (${totalOutlinks}) →`;
+                    const updateText = (el: HTMLElement) => {
+                        if (el.classList.contains('link-navigator-inlinks')) {
+                            el.textContent = `← INLINKS (${inlinks.length})`;
+                        } else if (el.classList.contains('link-navigator-outlinks')) {
+                            el.textContent = `OUTLINKS (${totalOutlinks}) →`;
+                        }
+                    };
+    
+                    // Update both desktop and mobile elements
+                    [this.inlinksEl, this.outlinksEl, ...Array.from(mobileContainer.children)].forEach((el) => {
+                        if (el instanceof HTMLElement) {
+                            updateText(el);
+                        }
+                    });
     
                     this.setupHoverPreview(this.inlinksEl, inlinks, 'Inlinks');
                     this.setupHoverPreview(this.outlinksEl, [...outlinks, ...canvasLinks], 'Outlinks');
+                    
+                    // Setup hover for mobile elements too
+                    const mobileInlink = mobileContainer.querySelector('.link-navigator-inlinks');
+                    const mobileOutlink = mobileContainer.querySelector('.link-navigator-outlinks');
+                    if (mobileInlink && mobileOutlink) {
+                        this.setupHoverPreview(mobileInlink as HTMLElement, inlinks, 'Inlinks');
+                        this.setupHoverPreview(mobileOutlink as HTMLElement, [...outlinks, ...canvasLinks], 'Outlinks');
+                    }
                 }
     
                 this.toggleDetailedView(view, file);
@@ -160,15 +192,6 @@ export default class LinkNavigationPlugin extends Plugin {
             document.addEventListener('click', this.handleClickOutside);
         } catch (error) {
             console.error('Error updating link navigator:', error);
-            requestAnimationFrame(() => {
-                if (this.inlinksEl && this.outlinksEl) {
-                    this.inlinksEl.textContent = 'INLINKS (0)';
-                    this.outlinksEl.textContent = 'OUTLINKS (0)';
-                    // Still show elements even if there are no links
-                    this.inlinksEl.classList.add('link-navigator-visible');
-                    this.outlinksEl.classList.add('link-navigator-visible');
-                }
-            });
         }
     }
 
@@ -178,6 +201,11 @@ export default class LinkNavigationPlugin extends Plugin {
         if (this.inlinksEl) this.inlinksEl.remove();
         if (this.outlinksEl) this.outlinksEl.remove();
         if (this.detailsEl) this.detailsEl.remove();
+        
+        // Remove mobile container if it exists
+        const mobileContainer = document.querySelector('.mobile-link-navigator');
+        if (mobileContainer) mobileContainer.remove();
+    
         this.inlinksEl = null;
         this.outlinksEl = null;
         this.detailsEl = null;
@@ -335,6 +363,7 @@ export default class LinkNavigationPlugin extends Plugin {
 
     // 3. Allow user click on "<- INLINKS" or "OUTLINKS ->" in LinkNavigation to expand and show
     // DetailedView and Render it
+    // In the toggleDetailedView method, modify it to handle both desktop and mobile clicks:
     private toggleDetailedView(view: MarkdownView, file: TFile) {
         if (this.detailsEl) {
             this.detailsEl.remove();
@@ -343,8 +372,8 @@ export default class LinkNavigationPlugin extends Plugin {
         const detailsInner = this.detailsEl.createEl('div', { cls: 'link-navigator-details' });
         detailsInner.classList.add('hidden');
         
-        view.containerEl.querySelector('.view-header')?.after(this.detailsEl);
-    
+        view.containerEl.querySelector('.view-content')?.prepend(this.detailsEl);  // Changed insertion point
+
         const toggleDetails = async (e: MouseEvent) => {
             e.stopPropagation();
             this.isDetailsVisible = !this.isDetailsVisible;
@@ -360,12 +389,24 @@ export default class LinkNavigationPlugin extends Plugin {
             }
         };
         
-        // Only add event listeners if there are links
-        if (this.inlinksEl && this.inlinksEl.style.display !== 'none') {
-            this.inlinksEl.addEventListener('click', toggleDetails);
-        }
-        if (this.outlinksEl && this.outlinksEl.style.display !== 'none') {
-            this.outlinksEl.addEventListener('click', toggleDetails);
+        // Add event listeners to both desktop and mobile elements
+        const addClickHandler = (element: HTMLElement | null) => {
+            if (element && element.style.display !== 'none') {
+                element.addEventListener('click', toggleDetails);
+            }
+        };
+
+        // Desktop elements
+        addClickHandler(this.inlinksEl);
+        addClickHandler(this.outlinksEl);
+
+        // Mobile elements
+        const mobileContainer = view.containerEl.querySelector('.mobile-link-navigator');
+        if (mobileContainer) {
+            const mobileInlinks = mobileContainer.querySelector('.link-navigator-inlinks');
+            const mobileOutlinks = mobileContainer.querySelector('.link-navigator-outlinks');
+            if (mobileInlinks instanceof HTMLElement) addClickHandler(mobileInlinks);
+            if (mobileOutlinks instanceof HTMLElement) addClickHandler(mobileOutlinks);
         }
     }
     

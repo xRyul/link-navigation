@@ -101,8 +101,13 @@
 .view-header {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap; /* Prevent wrapping */
+    min-width: 0; /* Allow flex items to shrink below their minimum content size */
+    gap: 4px; /* Add consistent spacing between elements */
 }
+
+/* Add this if you want to ensure minimum spacing between elements */
+
 
 .outlink-outlinks {
     padding-left: 20px;
@@ -110,6 +115,9 @@
 
 .link-navigator-inlinks,
 .link-navigator-outlinks {
+    flex: 0 1 auto; /* Allow shrinking but not growing */
+    white-space: nowrap; /* Prevent text wrapping */
+    min-width: 0;
     font-size: 0.9em;
     color: var(--text-muted);
     cursor: pointer;
@@ -124,9 +132,20 @@
     color: var(--text-normal);
 }
 
+/* Make the title area flexible but prevent overflow */
 .view-header-title {
-    flex: 1;
-    min-width: 0;
+    flex: 1 1 auto; /* Allow growing and shrinking */
+    min-width: 0; /* Allow text truncation */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Ensure view actions stay on the same line */
+.view-actions {
+    flex: 0 0 auto; /* Prevent shrinking */
+    display: flex;
+    gap: 4px;
 }
 
 .link-navigator-details-wrapper {
@@ -488,7 +507,7 @@
         transform: translateY(0);
     }
 }
-@media (max-width: 600px) {
+@media (max-width: 450px) {
     .link-hierarchy-wrapper {
         flex-direction: column;
     }
@@ -496,4 +515,44 @@
     .link-hierarchy-canvas {
         margin-top: 20px;
     }
+}
+
+/* Add these new mobile-specific styles */
+.mobile-link-navigator {
+    display: none; /* Hidden by default */
+}
+
+@media (max-width: 450px) {
+    .link-navigator-details-wrapper {
+        position: relative; /* Change to relative for better mobile layout */
+        margin-top: 10px;
+    }
+    .mobile-link-navigator {
+        display: flex;
+        justify-content: space-between;
+        background-color: var(--background-secondary);
+        border-bottom: 1px solid var(--background-modifier-border);
+    }
+
+    .view-header .link-navigator-inlinks,
+    .view-header .link-navigator-outlinks {
+        display: none;
+    }
+
+    /* Adjust detailed view for mobile */
+    .link-navigator-details {
+        max-width: 95%;
+        margin: 5px auto;
+    }
+
+    .depth-and-buttons-wrapper {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .button-container {
+        margin-top: 10px;
+        width: 100%;
+    }
+    
 }
