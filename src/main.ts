@@ -756,7 +756,21 @@ export default class LinkNavigationPlugin extends Plugin {
             const linkEl = li.createEl('a', { text: link, cls: 'internal-link' });
             linkEl.addEventListener('click', async (e) => {
                 e.preventDefault();
-                const canvasFile = this.app.vault.getAbstractFileByPath(`${link}.canvas`);
+                // Try different path variations to find the canvas file
+                let canvasFile = this.app.vault.getAbstractFileByPath(`${link}.canvas`);
+                
+                if (!canvasFile) {
+                    // Try finding it by normalized path
+                    const files = this.app.vault.getFiles().filter(f => 
+                        f.extension === 'canvas' && 
+                        f.basename.toLowerCase() === link.toLowerCase()
+                    );
+                    
+                    if (files.length > 0) {
+                        canvasFile = files[0];
+                    }
+                }
+    
                 if (canvasFile instanceof TFile) {
                     if (e.metaKey || e.ctrlKey) {
                         await this.openInNewLeaf(canvasFile);
@@ -764,7 +778,10 @@ export default class LinkNavigationPlugin extends Plugin {
                         this.app.workspace.getLeaf().openFile(canvasFile);
                     }
                 } else {
-                    new Notice(`Canvas file not found: ${link}`);
+                    // Provide more detailed error message
+                    new Notice(`Canvas file not found: ${link}\nTried paths:\n- ${link}.canvas`);
+                    console.error('Canvas file not found. Link:', link, 'Available canvas files:', 
+                        this.app.vault.getFiles().filter(f => f.extension === 'canvas').map(f => f.path));
                 }
             });
         });
