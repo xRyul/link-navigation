@@ -6,6 +6,7 @@ interface LinkNavigationSettings {
     showCanvasLinks: boolean;
     showCacheCleanupNotice: boolean;
     cacheCleanupInterval: number;
+    showAttachments: boolean;
 }
 
 type TimeoutId = ReturnType<typeof setTimeout>;
@@ -15,13 +16,15 @@ const DEFAULT_SETTINGS: LinkNavigationSettings = {
     cacheTimeout: 5 * 60 * 1000, // 5 minutes
     showCanvasLinks: true,
     cacheCleanupInterval: 5, // 5 minutes
-    showCacheCleanupNotice: true
+    showCacheCleanupNotice: true,
+    showAttachments: true
 }
 
 interface CacheEntry {
     inlinks: string[];
     outlinks: string[];
     canvasLinks: string[];
+    attachments: string[];
     timestamp: number;
 }
 
@@ -37,6 +40,7 @@ export default class LinkNavigationPlugin extends Plugin {
     private showCanvasLinks = true;
     private outlinksOfInlinksVisible = false;
     private shouldShowDetailedView = false;
+    showAttachments = true;
 
     // Add Cache
     private cache: Map<string, CacheEntry> = new Map();
@@ -54,6 +58,7 @@ export default class LinkNavigationPlugin extends Plugin {
 
         // Load saved toggle states
         this.showCanvasLinks = this.settings.showCanvasLinks;
+        this.showAttachments = this.settings.showAttachments;
         
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
@@ -211,11 +216,10 @@ export default class LinkNavigationPlugin extends Plugin {
                     
                     this.adjustLayout_insideExpandedDetailedView(viewHeader, viewHeaderTitle);
                 }
-    
                 
                 this.adjustLayout_insideExpandedDetailedView(viewHeader, viewHeaderTitle);
             });
-    
+
             document.addEventListener('click', this.handleClickOutside);
         } catch (error) {
             console.error('Error updating link navigator:', error);
@@ -285,6 +289,7 @@ export default class LinkNavigationPlugin extends Plugin {
         const inlinks = new Set<string>();
         const outlinks = new Set<string>();
         const canvasLinks = new Set<string>();
+        const attachments = new Set<string>();
     
         // Use Obsidian API to get inlinks
         const resolvedLinks = this.app.metadataCache.resolvedLinks;
@@ -338,10 +343,47 @@ export default class LinkNavigationPlugin extends Plugin {
             }
         }
     
+        // Define a regex pattern for all supported file types
+        const supportedExtensions = [
+            // Images
+            'avif', 'bmp', 'gif', 'jpeg', 'jpg', 'png', 'svg', 'webp', 'tif', 'tiff', 'psd', 'dng', 'heif', 'heic', 'cr2', 'nef', 'ico',
+            // Audio
+            'flac', 'm4a', 'mp3', 'ogg', 'wav', 'webm', '3gp',
+            // Video
+            'mkv', 'mov', 'mp4', 'ogv', 'avi',
+            // Documents
+            'pdf', 'doc', 'docx', 'xlsx', 'pptx', 'djvu', 'epub',
+            // Archives
+            'zip', '7z', 'tar', 'gz', 'rar', 'xc', 'bzip2', 'iso', 'cmg', 'msi'
+        ].join('|');
+
+        const attachmentRegex = new RegExp(`!?\\[\\[([^\\]]+\\.(${supportedExtensions}))\\]\\]`, 'gi');
+
+        // Check for attachments in embeds
+        if (fileCache && fileCache.embeds) {
+            for (const embed of fileCache.embeds) {
+                const attachmentFile = this.app.metadataCache.getFirstLinkpathDest(embed.link, file.path);
+                if (attachmentFile instanceof TFile) {
+                    const ext = attachmentFile.extension.toLowerCase();
+                    if (ext !== 'md' && ext !== 'canvas') {
+                        attachments.add(attachmentFile.basename + '.' + attachmentFile.extension);
+                    }
+                }
+            }
+        }
+
+        // Check for attachments in the main content
+        const content = await this.app.vault.read(file);
+        let match;
+        while ((match = attachmentRegex.exec(content)) !== null) {
+            attachments.add(match[1]);
+        }
+
         return { 
             inlinks: Array.from(inlinks), 
             outlinks: Array.from(outlinks), 
             canvasLinks: Array.from(canvasLinks),
+            attachments: Array.from(attachments),
             timestamp: Date.now() 
         };
     }
@@ -361,7 +403,47 @@ export default class LinkNavigationPlugin extends Plugin {
         }
     }
 
-
+    // 1.5
+    private renderAttachments(parentEl: HTMLElement, attachments: string[]) {
+        if (!this.settings.showAttachments || attachments.length === 0) return;
+        
+        const attachmentsUl = parentEl.createEl('ul', { cls: 'attachments-list' });
+        attachments.forEach(attachment => {
+            const li = attachmentsUl.createEl('li', { cls: 'attachment' });
+            const ext = attachment.split('.').pop()?.toLowerCase();
+            let icon = '📎';
+            
+            // Define icon mappings
+            const iconMap: {[key: string]: string} = {
+                // Images
+                'avif': '🖼️', 'bmp': '🖼️', 'gif': '🖼️', 'jpeg': '🖼️', 'jpg': '🖼️', 'png': '🖼️', 'svg': '🖼️', 'webp': '🖼️',
+                'tif': '🖼️', 'tiff': '🖼️', 'psd': '🖼️', 'dng': '🖼️', 'heif': '🖼️', 'heic': '🖼️', 'cr2': '🖼️', 'nef': '🖼️', 'ico': '🖼️',
+                // Audio
+                'flac': '🎵', 'm4a': '🎵', 'mp3': '🎵', 'ogg': '🎵', 'wav': '🎵', '3gp': '🎵',
+                // Video
+                'mkv': '🎥', 'mov': '🎥', 'mp4': '🎥', 'ogv': '🎥', 'webm': '🎥', 'avi': '🎥',
+                // Documents
+                'pdf': '📄', 'doc': '📄', 'docx': '📄', 'xlsx': '📊', 'pptx': '📊', 'djvu': '📚', 'epub': '📚',
+                // Archives
+                'zip': '🗜️', '7z': '🗜️', 'tar': '🗜️', 'gz': '🗜️', 'rar': '🗜️', 'xc': '🗜️', 'bzip2': '🗜️', 'iso': '💿', 'cmg': '💿', 'msi': '💿'
+            };
+            
+            if (ext && ext in iconMap) {
+                icon = iconMap[ext];
+            }
+            
+            li.createEl('span', { text: `${icon} `, cls: 'attachment-icon' });
+            const attachmentLink = li.createEl('a', { text: attachment, cls: 'internal-link' });
+            attachmentLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                const attachmentFile = this.app.metadataCache.getFirstLinkpathDest(attachment, '/');
+                if (attachmentFile instanceof TFile) {
+                    this.app.workspace.getLeaf().openFile(attachmentFile);
+                }
+            });
+        });
+        
+    }
 
     // 2. Allow user to hover over the LinkNavigation and get a preview
     setupHoverPreview(element: HTMLElement, links: string[], title: string) {
@@ -547,6 +629,24 @@ export default class LinkNavigationPlugin extends Plugin {
             outlinksOfInlinksToggle.buttonEl.classList.add('active');
         }
 
+        // Attachments toggle
+        const attachmentsToggle = new ButtonComponent(buttonContainer)
+            .setIcon('paperclip')
+            .setTooltip('Toggle attachments')
+            .onClick(async () => {
+                this.showAttachments = !this.showAttachments;
+                attachmentsToggle.buttonEl.classList.toggle('active');
+                this.settings.showAttachments = this.showAttachments;
+                await this.saveSettings();
+
+                // Re-render the entire detailed view
+                this.updateDetailedViewContent(containerEl, file);
+            });
+
+        if (this.showAttachments) {
+            attachmentsToggle.buttonEl.classList.add('active');
+        }
+
         // Initial content render
         await this.updateDetailedViewContent(containerEl, file);
 
@@ -555,13 +655,13 @@ export default class LinkNavigationPlugin extends Plugin {
     // 3.2 Create a div where to show all found infromation
     private async updateDetailedViewContent(containerEl: HTMLElement, file: TFile) {
         const contentEl = containerEl.querySelector('.link-navigator-content');
-        if (!contentEl) return;
+        if (!contentEl || !(contentEl instanceof HTMLElement)) return;
     
         contentEl.empty();
-    
+
         const hierarchyEl = contentEl.createDiv('link-hierarchy');
         await this.renderLinkHierarchy(hierarchyEl, file);
-        
+    
     }
 
     // 3.3 Create unordered list for each found link:
@@ -580,20 +680,19 @@ export default class LinkNavigationPlugin extends Plugin {
         // Calculate the indent for the current note based on the inlinks depth
         // const currentNoteIndent = inlinksDepth * 20; // Assuming 20px indent per level
     
-        // Render current note with the calculated indent
+        // Render current note
         const indentLevel = inlinksDepth;
         const currentLi = hierarchyUl.createEl('li', { 
             cls: `current-note indent-${indentLevel}` 
         });
         currentLi.createEl('span', { text: '\u00A0\u00A0\u00A0 •\u00A0\u00A0' });
         currentLi.createEl('strong', { text: file.basename });
-    
+
         // Render outlinks
         const outlinksUl = currentLi.createEl('ul', { cls: 'outlinks-list' });
-        // Always render at least one level of outlinks, but respect the max depth
         const outlinksDepth = Math.max(1, this.maxDepth - inlinksDepth);
         await this.renderOutlinksIteratively(file, outlinksUl, outlinksDepth);
-    
+
         // Render Canvas links
         if (this.showCanvasLinks && cacheEntry.canvasLinks.length > 0) {
             this.renderCanvasLinks(hierarchyUl, cacheEntry.canvasLinks);
@@ -709,6 +808,9 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             });
     
+            const cacheEntry = await this.cacheLinkData(sourceFile);
+            this.renderAttachments(li, cacheEntry.attachments);
+
             // Add outlinks (initially hidden)
             if (outlinks.length > 0) {
                 const outlinksUl = li.createEl('ul', { cls: 'inlink-outlinks' });
@@ -782,13 +884,18 @@ export default class LinkNavigationPlugin extends Plugin {
             processedLinks.add(currentFile.path);
             const cacheEntry = await this.cacheLinkData(currentFile);
     
-            if (cacheEntry.outlinks.length > 0) {
+            if (cacheEntry.outlinks.length > 0 || (this.settings.showAttachments && cacheEntry.attachments.length > 0)) {
                 const outlinksUl = currentEl.createEl('ul', { cls: 'outlink-outlinks' });
+    
+                // Only render attachments if showAttachments is true
+                if (this.settings.showAttachments) {
+                    this.renderAttachments(outlinksUl, cacheEntry.attachments);
+                }
     
                 for (const outlink of cacheEntry.outlinks) {
                     const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, currentFile.path);
                     if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
-                    const li = outlinksUl.createEl('li', { cls: `outlink outlink-depth-${depth}` });
+                        const li = outlinksUl.createEl('li', { cls: `outlink outlink-depth-${depth}` });
                         
                         li.createEl('span', { text: '→ ' });
                         const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
@@ -812,13 +919,13 @@ export default class LinkNavigationPlugin extends Plugin {
         const canvasLi = parentEl.createEl('li', { cls: 'canvas-links' });
         canvasLi.createEl('strong', { text: 'Canvas links' });
         const canvasUl = canvasLi.createEl('ul');
-        canvasLinks.forEach(link => {
+        canvasLinks.forEach(async (link) => {
             const li = canvasUl.createEl('li');
             const linkEl = li.createEl('a', { text: link, cls: 'internal-link' });
             linkEl.addEventListener('click', async (e) => {
                 e.preventDefault();
                 // Try different path variations to find the canvas file
-                let canvasFile = this.app.vault.getAbstractFileByPath(`${link}.canvas`);
+                let canvasFile = this.app.metadataCache.getFirstLinkpathDest(`${link}.canvas`, '/');
                 
                 if (!canvasFile) {
                     // Try finding it by normalized path
@@ -843,6 +950,12 @@ export default class LinkNavigationPlugin extends Plugin {
                     new Notice(`Canvas file not found: ${link}\nTried paths:\n- ${link}.canvas`);
                     console.error('Canvas file not found. Link:', link, 'Available canvas files:', 
                         this.app.vault.getFiles().filter(f => f.extension === 'canvas').map(f => f.path));
+                }
+
+                
+                if (canvasFile instanceof TFile) {
+                    const cacheEntry = await this.cacheLinkData(canvasFile);
+                    this.renderAttachments(li, cacheEntry.attachments);
                 }
             });
         });
@@ -992,6 +1105,22 @@ class LinkNavigationSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.searchCanvasLinks = value;
                     await this.plugin.saveSettings();
+                }));
+        
+        new Setting(containerEl)
+            .setName('Show attachments')
+            .setDesc('Display attachments in the link navigation')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showAttachments)
+                .onChange(async (value) => {
+                    this.plugin.settings.showAttachments = value;
+                    this.plugin.showAttachments = value;
+                    await this.plugin.saveSettings();
+                    // Trigger a re-render of the current view
+                    const activeFile = this.app.workspace.getActiveFile();
+                    if (activeFile) {
+                        this.plugin.updateLinkNavigation(activeFile, true);
+                    }
                 }));
 
         new Setting(containerEl)
