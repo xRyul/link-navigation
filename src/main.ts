@@ -36,6 +36,8 @@ export default class LinkNavigationPlugin extends Plugin {
     private isDetailsVisible = false;
     private showCanvasLinks = true;
     private outlinksOfInlinksVisible = false;
+    private shouldShowDetailedView = false;
+
     // Add Cache
     private cache: Map<string, CacheEntry> = new Map();
     private loadingPromises: Map<string, Promise<CacheEntry>> = new Map();
@@ -87,6 +89,19 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             }
         });
+
+        this.addCommand({
+            id: 'toggle-link-navigation-detailed-view',
+            name: 'Toggle link navigation detailed view',
+            callback: () => {
+                const activeFile = this.app.workspace.getActiveFile();
+                const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+                if (activeFile && view) {
+                    this.toggleDetailedView(view, activeFile);
+                }
+            }
+        });
+        
         this.setupCacheCleanup();
 
     }
@@ -98,6 +113,7 @@ export default class LinkNavigationPlugin extends Plugin {
         this.cache.clear();
         this.loadingPromises.clear();
         this.dirtyCache.clear();
+        this.shouldShowDetailedView = false;
 
         // Remove periodic cache cleanup interval
         if (this.cacheCleanupInterval !== null) {
@@ -183,9 +199,16 @@ export default class LinkNavigationPlugin extends Plugin {
                         this.setupHoverPreview(mobileInlink as HTMLElement, inlinks, 'Inlinks');
                         this.setupHoverPreview(mobileOutlink as HTMLElement, [...outlinks, ...canvasLinks], 'Outlinks');
                     }
+                    if (this.shouldShowDetailedView) {
+                        this.toggleDetailedView(view, file);
+                    }
+
+                    this.updateDetailedViewState(view, file);
+                    
+                    this.adjustLayout_insideExpandedDetailedView(viewHeader, viewHeaderTitle);
                 }
     
-                this.toggleDetailedView(view, file);
+                
                 this.adjustLayout_insideExpandedDetailedView(viewHeader, viewHeaderTitle);
             });
     
@@ -363,44 +386,47 @@ export default class LinkNavigationPlugin extends Plugin {
 
     // 3. Allow user click on "<- INLINKS" or "OUTLINKS ->" in LinkNavigation to expand and show
     // DetailedView and Render it
-    // In the toggleDetailedView method, modify it to handle both desktop and mobile clicks:
-    private toggleDetailedView(view: MarkdownView, file: TFile) {
-        if (this.detailsEl) {
-            this.detailsEl.remove();
-        }
-        this.detailsEl = view.containerEl.createEl('div', { cls: 'link-navigator-details-wrapper' });
-        const detailsInner = this.detailsEl.createEl('div', { cls: 'link-navigator-details' });
-        detailsInner.classList.add('hidden');
-        
-        view.containerEl.querySelector('.view-content')?.prepend(this.detailsEl);  // Changed insertion point
+    // handle both desktop and mobile clicks:
+    public toggleDetailedView(view: MarkdownView, file: TFile) {
+        this.shouldShowDetailedView = !this.shouldShowDetailedView;
+        this.updateDetailedViewState(view, file);
+    }
 
-        const toggleDetails = async (e: MouseEvent) => {
-            e.stopPropagation();
-            this.isDetailsVisible = !this.isDetailsVisible;
-            if (this.isDetailsVisible) {
-                detailsInner.classList.remove('hidden');
-                detailsInner.classList.add('visible');
-                await this.renderDetailedView(detailsInner, file);
-            } else {
-                detailsInner.classList.remove('visible');
-                if (!this.isDetailsVisible) {
-                    detailsInner.classList.add('hidden');
-                }
-            }
-        };
+    public updateDetailedViewState(view: MarkdownView, file: TFile) {
+        if (!this.detailsEl) {
+            this.detailsEl = view.containerEl.createEl('div', { cls: 'link-navigator-details-wrapper' });
+            const detailsInner = this.detailsEl.createEl('div', { cls: 'link-navigator-details' });
+            detailsInner.classList.add('hidden');
+            view.containerEl.querySelector('.view-content')?.prepend(this.detailsEl);
+        }
+
+        const detailsInner = this.detailsEl.querySelector('.link-navigator-details') as HTMLElement;
         
-        // Add event listeners to both desktop and mobile elements
+        if (this.shouldShowDetailedView) {
+            detailsInner.classList.remove('hidden');
+            detailsInner.classList.add('visible');
+            this.renderDetailedView(detailsInner, file);
+        } else {
+            detailsInner.classList.remove('visible');
+            detailsInner.classList.add('hidden');
+        }
+
+        this.updateClickHandlers(view);
+    }
+    
+
+    // 3.0.1
+    private updateClickHandlers(view: MarkdownView) {
         const addClickHandler = (element: HTMLElement | null) => {
             if (element && element.style.display !== 'none') {
-                element.addEventListener('click', toggleDetails);
+                element.removeEventListener('click', this.toggleDetailedViewHandler);
+                element.addEventListener('click', this.toggleDetailedViewHandler);
             }
         };
-
-        // Desktop elements
+    
         addClickHandler(this.inlinksEl);
         addClickHandler(this.outlinksEl);
-
-        // Mobile elements
+    
         const mobileContainer = view.containerEl.querySelector('.mobile-link-navigator');
         if (mobileContainer) {
             const mobileInlinks = mobileContainer.querySelector('.link-navigator-inlinks');
@@ -409,10 +435,18 @@ export default class LinkNavigationPlugin extends Plugin {
             if (mobileOutlinks instanceof HTMLElement) addClickHandler(mobileOutlinks);
         }
     }
-    
-    
-    
 
+    // 3.0.2
+    private toggleDetailedViewHandler = (e: MouseEvent) => {
+        e.stopPropagation();
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const file = this.app.workspace.getActiveFile();
+        if (view && file) {
+            this.toggleDetailedView(view, file);
+        }
+    };
+    
+    
     // 3.1 Render DetailedView elements: Depth, Refresh button, Canvas Links toggle button.
     //     And fill it with inlinks, backlinks, canvas links information
     async renderDetailedView(containerEl: HTMLElement, file: TFile) {
@@ -675,7 +709,6 @@ export default class LinkNavigationPlugin extends Plugin {
         return maxInlinkDepth; // Return the maximum depth of inlinks
     }
 
-
     // 3.3.1.1 Helper method to add to the class to handle the CMD/Ctrl click behavior
     private async openInNewLeaf(file: TFile) {
         const leaf = this.app.workspace.getLeaf('tab');
@@ -805,20 +838,18 @@ export default class LinkNavigationPlugin extends Plugin {
     // 5. Collapse DetailedView. This method will check if the click occurred 
     // outside the detailed view. If so, it will collapse the detailed view.
     private handleClickOutside = (event: MouseEvent) => {
-        if (this.detailsEl && this.isDetailsVisible) {
+        if (this.detailsEl && this.shouldShowDetailedView) {
             const target = event.target as HTMLElement;
             const detailsInner = this.detailsEl.querySelector('.link-navigator-details');
             if (detailsInner instanceof HTMLElement && 
                 !detailsInner.contains(target) && 
                 !this.inlinksEl?.contains(target) && 
                 !this.outlinksEl?.contains(target)) {
-                detailsInner.classList.remove('visible');
-                this.isDetailsVisible = false;
-
-                if (!this.isDetailsVisible) {
-                        detailsInner.classList.add('hidden');
+                const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+                const file = this.app.workspace.getActiveFile();
+                if (view && file) {
+                    this.toggleDetailedView(view, file);
                 }
-                
             }
         }
     };
