@@ -102,6 +102,8 @@ export default class LinkNavigationPlugin extends Plugin {
             }
         });
         
+        document.addEventListener('keydown', this.handleEscapeKey);
+
         this.setupCacheCleanup();
 
     }
@@ -115,6 +117,8 @@ export default class LinkNavigationPlugin extends Plugin {
         this.dirtyCache.clear();
         this.shouldShowDetailedView = false;
 
+        document.removeEventListener('keydown', this.handleEscapeKey);
+        
         // Remove periodic cache cleanup interval
         if (this.cacheCleanupInterval !== null) {
             clearInterval(this.cacheCleanupInterval);
@@ -388,7 +392,11 @@ export default class LinkNavigationPlugin extends Plugin {
     // DetailedView and Render it
     // handle both desktop and mobile clicks:
     public toggleDetailedView(view: MarkdownView, file: TFile) {
-        this.shouldShowDetailedView = !this.shouldShowDetailedView;
+        if (this.shouldShowDetailedView || this.detailsEl?.querySelector('.link-navigator-details')?.classList.contains('visible')) {
+            this.shouldShowDetailedView = false;
+        } else {
+            this.shouldShowDetailedView = true;
+        }
         this.updateDetailedViewState(view, file);
     }
 
@@ -446,6 +454,16 @@ export default class LinkNavigationPlugin extends Plugin {
         }
     };
     
+    // 3.0.3
+    private handleEscapeKey = (event: KeyboardEvent) => {
+        if (event.key === 'Escape' && this.shouldShowDetailedView) {
+            const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+            const file = this.app.workspace.getActiveFile();
+            if (view && file) {
+                this.toggleDetailedView(view, file);
+            }
+        }
+    };
     
     // 3.1 Render DetailedView elements: Depth, Refresh button, Canvas Links toggle button.
     //     And fill it with inlinks, backlinks, canvas links information
