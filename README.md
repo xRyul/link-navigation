@@ -44,6 +44,8 @@ Thus it helps by allowing you to:
 - [ ] Better support with 'daily-nav-bar' plugin
 - [ ] If 2 same notes open, then NavigationalLinks gonna show up only on 1 
 - [ ] notes deep inside the folder. improve layout
+- [ ] add note previews on link hover
+- [ ] add support for tags
 
 ## Settings
 
