@@ -347,17 +347,25 @@ export default class LinkNavigationPlugin extends Plugin {
         const supportedExtensions = [
             // Images
             'avif', 'bmp', 'gif', 'jpeg', 'jpg', 'png', 'svg', 'webp', 'tif', 'tiff', 'psd', 'dng', 'heif', 'heic', 'cr2', 'nef', 'ico',
+            
             // Audio
             'flac', 'm4a', 'mp3', 'ogg', 'wav', 'webm', '3gp',
+            
             // Video
             'mkv', 'mov', 'mp4', 'ogv', 'avi',
+            
             // Documents
             'pdf', 'doc', 'docx', 'xlsx', 'pptx', 'djvu', 'epub',
+            
             // Archives
-            'zip', '7z', 'tar', 'gz', 'rar', 'xc', 'bzip2', 'iso', 'cmg', 'msi'
+            'zip', '7z', 'tar', 'gz', 'rar', 'xc', 'bzip2', 'iso', 'cmg', 'msi',
+            
+            // Programming
+            'py', 'js', 'ts', 'html', 'css', 'json', 'xml', 'java', 'cpp', 'cs', 'rb', 'php', 'swift', 'go', 'rs', 'sh'
         ].join('|');
 
-        const attachmentRegex = new RegExp(`!?\\[\\[([^\\]]+\\.(${supportedExtensions}))\\]\\]`, 'gi');
+        const attachmentRegex = new RegExp(`!?\\[\\[([^\\]]+\\.(?:${supportedExtensions}))\\]\\]`, 'gi');
+
 
         // Check for attachments in embeds
         if (fileCache && fileCache.embeds) {
@@ -413,19 +421,26 @@ export default class LinkNavigationPlugin extends Plugin {
             const ext = attachment.split('.').pop()?.toLowerCase();
             let icon = '📎';
             
-            // Define icon mappings
-            const iconMap: {[key: string]: string} = {
+            const iconMap: { [key: string]: string } = {
                 // Images
                 'avif': '🖼️', 'bmp': '🖼️', 'gif': '🖼️', 'jpeg': '🖼️', 'jpg': '🖼️', 'png': '🖼️', 'svg': '🖼️', 'webp': '🖼️',
                 'tif': '🖼️', 'tiff': '🖼️', 'psd': '🖼️', 'dng': '🖼️', 'heif': '🖼️', 'heic': '🖼️', 'cr2': '🖼️', 'nef': '🖼️', 'ico': '🖼️',
+                
                 // Audio
                 'flac': '🎵', 'm4a': '🎵', 'mp3': '🎵', 'ogg': '🎵', 'wav': '🎵', '3gp': '🎵',
+                
                 // Video
                 'mkv': '🎥', 'mov': '🎥', 'mp4': '🎥', 'ogv': '🎥', 'webm': '🎥', 'avi': '🎥',
+                
                 // Documents
                 'pdf': '📄', 'doc': '📄', 'docx': '📄', 'xlsx': '📊', 'pptx': '📊', 'djvu': '📚', 'epub': '📚',
+                
                 // Archives
-                'zip': '🗜️', '7z': '🗜️', 'tar': '🗜️', 'gz': '🗜️', 'rar': '🗜️', 'xc': '🗜️', 'bzip2': '🗜️', 'iso': '💿', 'cmg': '💿', 'msi': '💿'
+                'zip': '🗜️', '7z': '🗜️', 'tar': '🗜️', 'gz': '🗜️', 'rar': '🗜️', 'xc': '🗜️', 'bzip2': '🗜️', 'iso': '💿', 'cmg': '💿', 'msi': '💿',
+                
+                // Programming (single icon for all)
+                'py': '💻', 'js': '💻', 'ts': '💻', 'html': '💻', 'css': '💻', 'json': '💻', 'xml': '💻', 'java': '💻', 'cpp': '💻', 'cs': '💻',
+                'rb': '💻', 'php': '💻', 'swift': '💻', 'go': '💻', 'rs': '💻', 'sh': '💻'
             };
             
             if (ext && ext in iconMap) {
