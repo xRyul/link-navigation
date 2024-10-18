@@ -331,7 +331,7 @@ export default class LinkNavigationPlugin extends Plugin {
             for (const canvasFile of canvasFiles) {
                 const content = await this.app.vault.read(canvasFile);
                 const escapedFileName = file.basename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const linkRegex = new RegExp(`(?:\\[\\[${escapedFileName}(?:\\|.*?)?\\]\\])|(?:!\\[\\[${escapedFileName}(?:\\|.*?)?\\]\\])`, 'g');
+                const linkRegex = new RegExp(`(?:\\[\\[${escapedFileName}(?:#[^\\]]+)?(?:\\|.*?)?\\]\\])|(?:!\\[\\[${escapedFileName}(?:#[^\\]]+)?(?:\\|.*?)?\\]\\])`, 'g');
                 if (linkRegex.test(content)) {
                     canvasLinks.add(canvasFile.basename);
                 }
@@ -348,7 +348,10 @@ export default class LinkNavigationPlugin extends Plugin {
 
     // 1.4
     private addLinkToAppropriateSet(link: string, outlinks: Set<string>, canvasLinks: Set<string>) {
-        const linkedFile = this.app.metadataCache.getFirstLinkpathDest(link, '');
+        // Remove any header information from the link
+        const linkWithoutHeader = link.split('#')[0];
+        
+        const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkWithoutHeader, '');
         if (linkedFile instanceof TFile) {
             if (linkedFile.extension === 'canvas') {
                 canvasLinks.add(linkedFile.basename);
