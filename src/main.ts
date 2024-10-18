@@ -303,31 +303,24 @@ export default class LinkNavigationPlugin extends Plugin {
             // Check links in the main content
             if (fileCache.links) {
                 for (const link of fileCache.links) {
-                    const linkedFile = this.app.metadataCache.getFirstLinkpathDest(link.link, file.path);
-                    if (linkedFile instanceof TFile) {
-                        if (linkedFile.extension === 'canvas') {
-                            canvasLinks.add(linkedFile.basename);
-                        } else {
-                            outlinks.add(linkedFile.basename);
-                        }
-                    }
+                    this.addLinkToAppropriateSet(link.link, outlinks, canvasLinks);
                 }
             }
     
-            // Check links in the frontmatter
+            // Check embedded links in the main content
+            if (fileCache.embeds) {
+                for (const embed of fileCache.embeds) {
+                    this.addLinkToAppropriateSet(embed.link, outlinks, canvasLinks);
+                }
+            }
+    
+            // Check links and embeds in the frontmatter
             if (fileCache.frontmatter) {
                 const frontmatterContent = JSON.stringify(fileCache.frontmatter);
-                const frontmatterLinks = frontmatterContent.match(/\[\[([^\]]+)\]\]/g) || [];
-                for (const link of frontmatterLinks) {
-                    const cleanLink = link.slice(2, -2).split('|')[0];
-                    const linkedFile = this.app.metadataCache.getFirstLinkpathDest(cleanLink, file.path);
-                    if (linkedFile instanceof TFile) {
-                        if (linkedFile.extension === 'canvas') {
-                            canvasLinks.add(linkedFile.basename);
-                        } else {
-                            outlinks.add(linkedFile.basename);
-                        }
-                    }
+                const allLinks = frontmatterContent.match(/(?:\[\[([^\]]+)\]\])|(?:!\[\[([^\]]+)\]\])/g) || [];
+                for (const link of allLinks) {
+                    const cleanLink = link.replace(/^!?\[\[|\]\]$/g, '').split('|')[0];
+                    this.addLinkToAppropriateSet(cleanLink, outlinks, canvasLinks);
                 }
             }
         }
@@ -338,13 +331,13 @@ export default class LinkNavigationPlugin extends Plugin {
             for (const canvasFile of canvasFiles) {
                 const content = await this.app.vault.read(canvasFile);
                 const escapedFileName = file.basename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const linkRegex = new RegExp(`\\[\\[${escapedFileName}(\\|.*?)?\\]\\]`, 'g');
+                const linkRegex = new RegExp(`(?:\\[\\[${escapedFileName}(?:\\|.*?)?\\]\\])|(?:!\\[\\[${escapedFileName}(?:\\|.*?)?\\]\\])`, 'g');
                 if (linkRegex.test(content)) {
                     canvasLinks.add(canvasFile.basename);
                 }
             }
         }
-
+    
         return { 
             inlinks: Array.from(inlinks), 
             outlinks: Array.from(outlinks), 
@@ -352,6 +345,20 @@ export default class LinkNavigationPlugin extends Plugin {
             timestamp: Date.now() 
         };
     }
+
+    // 1.4
+    private addLinkToAppropriateSet(link: string, outlinks: Set<string>, canvasLinks: Set<string>) {
+        const linkedFile = this.app.metadataCache.getFirstLinkpathDest(link, '');
+        if (linkedFile instanceof TFile) {
+            if (linkedFile.extension === 'canvas') {
+                canvasLinks.add(linkedFile.basename);
+            } else {
+                outlinks.add(linkedFile.basename);
+            }
+        }
+    }
+
+
 
     // 2. Allow user to hover over the LinkNavigation and get a preview
     setupHoverPreview(element: HTMLElement, links: string[], title: string) {
