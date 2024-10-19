@@ -617,3 +617,23 @@
     background-color: var(--interactive-accent);
     color: var(--text-on-accent);
 }
+
+.link-navigator-tags {
+    margin-top: 4px;
+    margin-left: 40px;  /* Indent tags */
+    color: var(--tag-color)
+}
+
+.link-navigator-tags .tag {
+    font-size: 0.9em;
+    padding: 2px 4px;
+    margin-bottom: 2px;
+    background-color: var(--background-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.link-navigator-tags .tag:hover {
+    background-color: var(--background-modifier-hover);
+}

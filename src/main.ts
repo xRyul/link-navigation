@@ -7,6 +7,7 @@ interface LinkNavigationSettings {
     showCacheCleanupNotice: boolean;
     cacheCleanupInterval: number;
     showAttachments: boolean;
+    showTags: boolean;
 }
 
 type TimeoutId = ReturnType<typeof setTimeout>;
@@ -17,7 +18,8 @@ const DEFAULT_SETTINGS: LinkNavigationSettings = {
     showCanvasLinks: true,
     cacheCleanupInterval: 5, // 5 minutes
     showCacheCleanupNotice: true,
-    showAttachments: true
+    showAttachments: true,
+    showTags: true
 }
 
 interface CacheEntry {
@@ -25,6 +27,7 @@ interface CacheEntry {
     outlinks: string[];
     canvasLinks: string[];
     attachments: string[];
+    tags: string[];
     timestamp: number;
 }
 
@@ -41,6 +44,7 @@ export default class LinkNavigationPlugin extends Plugin {
     private outlinksOfInlinksVisible = false;
     private shouldShowDetailedView = false;
     showAttachments = true;
+    showTags = false;
 
     // Add Cache
     private cache: Map<string, CacheEntry> = new Map();
@@ -59,6 +63,7 @@ export default class LinkNavigationPlugin extends Plugin {
         // Load saved toggle states
         this.showCanvasLinks = this.settings.showCanvasLinks;
         this.showAttachments = this.settings.showAttachments;
+        this.showTags = this.settings.showTags;
         
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
@@ -290,6 +295,7 @@ export default class LinkNavigationPlugin extends Plugin {
         const outlinks = new Set<string>();
         const canvasLinks = new Set<string>();
         const attachments = new Set<string>();
+        const tags = new Set<string>();
     
         // Use Obsidian API to get inlinks
         const resolvedLinks = this.app.metadataCache.resolvedLinks;
@@ -387,11 +393,27 @@ export default class LinkNavigationPlugin extends Plugin {
             attachments.add(match[1]);
         }
 
+        // Get tags from the file
+        if (fileCache) {
+            if (fileCache.tags) {
+                fileCache.tags.forEach(tag => tags.add(tag.tag));
+            }
+            // Check for tags in the frontmatter
+            if (fileCache.frontmatter && fileCache.frontmatter.tags) {
+                if (Array.isArray(fileCache.frontmatter.tags)) {
+                    fileCache.frontmatter.tags.forEach((tag: string) => tags.add(tag));
+                } else if (typeof fileCache.frontmatter.tags === 'string') {
+                    tags.add(fileCache.frontmatter.tags);
+                }
+            }
+        }
+
         return { 
             inlinks: Array.from(inlinks), 
             outlinks: Array.from(outlinks), 
             canvasLinks: Array.from(canvasLinks),
             attachments: Array.from(attachments),
+            tags: Array.from(tags),
             timestamp: Date.now() 
         };
     }
@@ -458,6 +480,20 @@ export default class LinkNavigationPlugin extends Plugin {
             });
         });
         
+    }
+
+    // 1.6
+    private renderTags(parentEl: HTMLElement, tags: string[]) {
+        if (!this.showTags || tags.length === 0) return;
+        
+        const tagsContainer = parentEl.createEl('div', { cls: 'link-navigator-tags' });
+        tags.forEach(tag => {
+            const tagEl = tagsContainer.createEl('div', { cls: 'tag', text: `${tag}` });
+            tagEl.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.app.workspace.openLinkText(`#${tag}`, '', true);
+            });
+        });
     }
 
     // 2. Allow user to hover over the LinkNavigation and get a preview
@@ -527,6 +563,7 @@ export default class LinkNavigationPlugin extends Plugin {
         }
 
         this.updateClickHandlers(view);
+
     }
     
 
@@ -662,6 +699,19 @@ export default class LinkNavigationPlugin extends Plugin {
             attachmentsToggle.buttonEl.classList.add('active');
         }
 
+        // Add Tags toggle
+        const tagsToggle = new ButtonComponent(buttonContainer)
+        .setIcon('tag')
+        .setTooltip('Toggle tags')
+        .onClick(() => {
+            this.showTags = !this.showTags;
+            tagsToggle.buttonEl.classList.toggle('active');
+            this.updateDetailedViewContent(containerEl, file);
+        });
+
+        if (this.showTags) {
+            tagsToggle.buttonEl.classList.add('active');
+        }
         // Initial content render
         await this.updateDetailedViewContent(containerEl, file);
 
@@ -711,6 +761,11 @@ export default class LinkNavigationPlugin extends Plugin {
         // Render Canvas links
         if (this.showCanvasLinks && cacheEntry.canvasLinks.length > 0) {
             this.renderCanvasLinks(hierarchyUl, cacheEntry.canvasLinks);
+        }
+        // Add tags for current note
+        if (this.showTags) {
+            const currentNoteCacheEntry = await this.cacheLinkData(file);
+            this.renderTags(currentLi, currentNoteCacheEntry.tags);
         }
     }
     
@@ -823,6 +878,7 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             });
     
+            // Show attachements
             const cacheEntry = await this.cacheLinkData(sourceFile);
             this.renderAttachments(li, cacheEntry.attachments);
 
@@ -847,6 +903,15 @@ export default class LinkNavigationPlugin extends Plugin {
                             }
                         }
                     });
+                    
+                    // Add tags for outlinks of inlinks
+                    if (this.showTags) {
+                        const outlinkFile = this.app.metadataCache.getFirstLinkpathDest(outlink, '/');
+                        if (outlinkFile instanceof TFile) {
+                            const outlinkCacheEntry = await this.cacheLinkData(outlinkFile);
+                            this.renderTags(outLi, outlinkCacheEntry.tags);
+                        }
+                    }
                 }
             }
         }
@@ -914,6 +979,13 @@ export default class LinkNavigationPlugin extends Plugin {
                         
                         li.createEl('span', { text: '→ ' });
                         const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
+
+                        // Only render tags if showTags is true
+                        if (this.showTags) {
+                            const outlinkCacheEntry = await this.cacheLinkData(linkedFile);
+                            this.renderTags(li, outlinkCacheEntry.tags);
+                        }
+
                         link.addEventListener('click', async (e) => {
                             e.preventDefault();
                             if (e.metaKey || e.ctrlKey) {
@@ -972,6 +1044,12 @@ export default class LinkNavigationPlugin extends Plugin {
                     const cacheEntry = await this.cacheLinkData(canvasFile);
                     this.renderAttachments(li, cacheEntry.attachments);
                 }
+
+                if (this.settings.showTags && canvasFile instanceof TFile) {
+                    const canvasCacheEntry = await this.cacheLinkData(canvasFile);
+                    this.renderTags(li, canvasCacheEntry.tags);
+                }
+
             });
         });
     }
@@ -1130,6 +1208,22 @@ class LinkNavigationSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.showAttachments = value;
                     this.plugin.showAttachments = value;
+                    await this.plugin.saveSettings();
+                    // Trigger a re-render of the current view
+                    const activeFile = this.app.workspace.getActiveFile();
+                    if (activeFile) {
+                        this.plugin.updateLinkNavigation(activeFile, true);
+                    }
+                }));
+
+        new Setting(containerEl)
+            .setName('Show tags')
+            .setDesc('Display tags for inlinks, outlinks, and canvas links')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showTags)
+                .onChange(async (value) => {
+                    this.plugin.settings.showTags = value;
+                    this.plugin.showTags = value;
                     await this.plugin.saveSettings();
                     // Trigger a re-render of the current view
                     const activeFile = this.app.workspace.getActiveFile();
