@@ -1,3 +1,8 @@
+
+// DONE: Better refresh when enabling buttons from settings
+// DONE: Tags which are found under current note hsould be shown not under outlinks but under current note itself
+// DONE: When Outlinks of inlinks is enabled sometimes it also finds attachments
+
 import { App, Menu, Notice, Plugin, PluginSettingTab, Setting, debounce, TFile, MarkdownView, ButtonComponent, TextComponent} from 'obsidian';
 
 interface LinkNavigationSettings {
@@ -43,8 +48,8 @@ export default class LinkNavigationPlugin extends Plugin {
     private showCanvasLinks = true;
     private outlinksOfInlinksVisible = false;
     private shouldShowDetailedView = false;
-    showAttachments = true;
-    showTags = false;
+    private showAttachments = true;
+    private showTags = false;
 
     // Add Cache
     private cache: Map<string, CacheEntry> = new Map();
@@ -645,21 +650,19 @@ export default class LinkNavigationPlugin extends Plugin {
             });
     
         // Canvas Links toggle
-        const canvasLinksToggle = new ButtonComponent(buttonContainer)
-            .setButtonText('Canvas links')
-            .setClass('canvas-links-toggle')
-            .onClick(async () => {
-                this.showCanvasLinks = !this.showCanvasLinks;
-                canvasLinksToggle.buttonEl.classList.toggle('active');
-                this.settings.showCanvasLinks = this.showCanvasLinks;
-                await this.saveSettings();
+        if (this.settings.showCanvasLinks) {
+            const canvasLinksToggle = new ButtonComponent(buttonContainer)
+                .setButtonText('Canvas links')
+                .setClass('canvas-links-toggle')
+                .onClick(async () => {
+                    this.showCanvasLinks = !this.showCanvasLinks;
+                    canvasLinksToggle.buttonEl.classList.toggle('active');
+                    this.updateDetailedViewContent(containerEl, file);
+                });
 
-                // Re-render the entire detailed view
-                this.updateDetailedViewContent(containerEl, file);
-            });
-
-        if (this.showCanvasLinks) {
-            canvasLinksToggle.buttonEl.classList.add('active');
+            if (this.showCanvasLinks) {
+                canvasLinksToggle.buttonEl.classList.add('active');
+            }
         }
     
         containerEl.createDiv('link-navigator-content');
@@ -682,35 +685,35 @@ export default class LinkNavigationPlugin extends Plugin {
         }
 
         // Attachments toggle
-        const attachmentsToggle = new ButtonComponent(buttonContainer)
-            .setIcon('paperclip')
-            .setTooltip('Toggle attachments')
-            .onClick(async () => {
-                this.showAttachments = !this.showAttachments;
-                attachmentsToggle.buttonEl.classList.toggle('active');
-                this.settings.showAttachments = this.showAttachments;
-                await this.saveSettings();
+        if (this.settings.showAttachments) {
+            const attachmentsToggle = new ButtonComponent(buttonContainer)
+                .setIcon('paperclip')
+                .setTooltip('Toggle attachments')
+                .onClick(async () => {
+                    this.showAttachments = !this.showAttachments;
+                    attachmentsToggle.buttonEl.classList.toggle('active');
+                    this.updateDetailedViewContent(containerEl, file);
+                });
 
-                // Re-render the entire detailed view
-                this.updateDetailedViewContent(containerEl, file);
-            });
-
-        if (this.showAttachments) {
-            attachmentsToggle.buttonEl.classList.add('active');
+            if (this.showAttachments) {
+                attachmentsToggle.buttonEl.classList.add('active');
+            }
         }
 
         // Add Tags toggle
-        const tagsToggle = new ButtonComponent(buttonContainer)
-        .setIcon('tag')
-        .setTooltip('Toggle tags')
-        .onClick(() => {
-            this.showTags = !this.showTags;
-            tagsToggle.buttonEl.classList.toggle('active');
-            this.updateDetailedViewContent(containerEl, file);
-        });
+        if (this.settings.showTags) {
+            const tagsToggle = new ButtonComponent(buttonContainer)
+                .setIcon('tag')
+                .setTooltip('Toggle tags')
+                .onClick(() => {
+                    this.showTags = !this.showTags;
+                    tagsToggle.buttonEl.classList.toggle('active');
+                    this.updateDetailedViewContent(containerEl, file);
+                });
 
-        if (this.showTags) {
-            tagsToggle.buttonEl.classList.add('active');
+            if (this.showTags) {
+                tagsToggle.buttonEl.classList.add('active');
+            }
         }
         // Initial content render
         await this.updateDetailedViewContent(containerEl, file);
@@ -753,6 +756,12 @@ export default class LinkNavigationPlugin extends Plugin {
         currentLi.createEl('span', { text: '\u00A0\u00A0\u00A0 •\u00A0\u00A0' });
         currentLi.createEl('strong', { text: file.basename });
 
+        // Add tags for current note
+        if (this.showTags  && cacheEntry.tags.length > 0) {
+            const currentNoteCacheEntry = await this.cacheLinkData(file);
+            this.renderTags(currentLi, currentNoteCacheEntry.tags);
+        }
+
         // Render outlinks
         const outlinksUl = currentLi.createEl('ul', { cls: 'outlinks-list' });
         const outlinksDepth = Math.max(1, this.maxDepth - inlinksDepth);
@@ -762,11 +771,7 @@ export default class LinkNavigationPlugin extends Plugin {
         if (this.showCanvasLinks && cacheEntry.canvasLinks.length > 0) {
             this.renderCanvasLinks(hierarchyUl, cacheEntry.canvasLinks);
         }
-        // Add tags for current note
-        if (this.showTags) {
-            const currentNoteCacheEntry = await this.cacheLinkData(file);
-            this.renderTags(currentLi, currentNoteCacheEntry.tags);
-        }
+
     }
     
     // 3.3.1 Search for Inlinks: top-down approach
@@ -867,7 +872,7 @@ export default class LinkNavigationPlugin extends Plugin {
             });
     
             li.createEl('span', { text: '← ', cls: 'inlink-arrow' });
-
+    
             const link = li.createEl('a', { text: sourceFile.basename, cls: 'internal-link' });
             link.addEventListener('click', async (e) => {
                 e.preventDefault();
@@ -878,36 +883,44 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             });
     
-            // Show attachements
-            const cacheEntry = await this.cacheLinkData(sourceFile);
-            this.renderAttachments(li, cacheEntry.attachments);
+            // Add tags for inlinks
+            if (this.showTags) {
+                const inlinkCacheEntry = await this.cacheLinkData(sourceFile);
+                this.renderTags(li, inlinkCacheEntry.tags);
+            }
+
+            // Create a container for attachments
+            const attachmentsContainer = li.createEl('div', { cls: 'inlink-attachments' });
+            // Render attachments for the inlink itself
+            // Render attachments for the inlink
+            if (this.showAttachments) {
+                const inlinkCacheEntry = await this.cacheLinkData(sourceFile);
+                await this.renderAttachmentsForOutlink(sourceFile, attachmentsContainer, inlinkCacheEntry.attachments);
+            }
 
             // Add outlinks (initially hidden)
-            if (outlinks.length > 0) {
+            if (outlinks.length > 0 || (this.showAttachments && sourceFile)) {
                 const outlinksUl = li.createEl('ul', { cls: 'inlink-outlinks' });
                 if (!this.outlinksOfInlinksVisible) {
                     outlinksUl.addClass('hidden');
                 }
                 for (const outlink of outlinks) {
-                    const outLi = outlinksUl.createEl('li');
-                    outLi.createEl('span', { text: '→ ' });
-                    const outLink = outLi.createEl('a', { text: outlink, cls: 'internal-link' });
-                    outLink.addEventListener('click', async (e) => {
-                        e.preventDefault();
-                        const outlinkFile = this.app.metadataCache.getFirstLinkpathDest(outlink, '/');
-                        if (outlinkFile instanceof TFile) {
+                    const outlinkFile = this.app.metadataCache.getFirstLinkpathDest(outlink, '/');
+                    if (outlinkFile instanceof TFile && outlinkFile.extension === 'md') {
+                        const outLi = outlinksUl.createEl('li');
+                        outLi.createEl('span', { text: '→ ' });
+                        const outLink = outLi.createEl('a', { text: outlink, cls: 'internal-link' });
+                        outLink.addEventListener('click', async (e) => {
+                            e.preventDefault();
                             if (e.metaKey || e.ctrlKey) {
                                 await this.openInNewLeaf(outlinkFile);
                             } else {
                                 this.app.workspace.getLeaf().openFile(outlinkFile);
                             }
-                        }
-                    });
-                    
-                    // Add tags for outlinks of inlinks
-                    if (this.showTags) {
-                        const outlinkFile = this.app.metadataCache.getFirstLinkpathDest(outlink, '/');
-                        if (outlinkFile instanceof TFile) {
+                        });
+                        
+                        // Add tags for outlinks of inlinks
+                        if (this.showTags) {
                             const outlinkCacheEntry = await this.cacheLinkData(outlinkFile);
                             this.renderTags(outLi, outlinkCacheEntry.tags);
                         }
@@ -916,13 +929,35 @@ export default class LinkNavigationPlugin extends Plugin {
             }
         }
     
-        return maxInlinkDepth; // Return the maximum depth of inlinks
+        return maxInlinkDepth;
     }
 
     // 3.3.1.1 Helper method to add to the class to handle the CMD/Ctrl click behavior
     private async openInNewLeaf(file: TFile) {
         const leaf = this.app.workspace.getLeaf('tab');
         await leaf.openFile(file, { active: false });
+    }
+
+    private async renderAttachmentsForOutlink(file: TFile, parentEl: HTMLElement, attachments: string[]) {
+        if (!this.showAttachments || attachments.length === 0) return;
+    
+        const attachmentsUl = parentEl.createEl('ul', { cls: 'outlink-attachments' });
+        for (const attachment of attachments) {
+            const li = attachmentsUl.createEl('li');
+            li.createEl('span', { text: '📎 ' });
+            const attachmentLink = li.createEl('a', { text: attachment, cls: 'internal-link' });
+            attachmentLink.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const attachmentFile = this.app.metadataCache.getFirstLinkpathDest(attachment, file.path);
+                if (attachmentFile instanceof TFile) {
+                    if (e.metaKey || e.ctrlKey) {
+                        await this.openInNewLeaf(attachmentFile);
+                    } else {
+                        this.app.workspace.getLeaf().openFile(attachmentFile);
+                    }
+                }
+            });
+        }
     }
 
     // 3.3.2 Search for Outlinks and create indents (from fileCache, frontmatter & links in Canvas) 
@@ -951,6 +986,7 @@ export default class LinkNavigationPlugin extends Plugin {
     async renderOutlinksIteratively(file: TFile, parentEl: HTMLElement, maxDepth: number) {
         const queue: { file: TFile; depth: number; element: HTMLElement }[] = [{ file, depth: 0, element: parentEl }];
         const processedLinks: Set<string> = new Set();
+        const processedAttachments: Map<string, Set<string>> = new Map();
     
         while (queue.length > 0) {
             const current = queue.shift();
@@ -964,12 +1000,15 @@ export default class LinkNavigationPlugin extends Plugin {
             processedLinks.add(currentFile.path);
             const cacheEntry = await this.cacheLinkData(currentFile);
     
-            if (cacheEntry.outlinks.length > 0 || (this.settings.showAttachments && cacheEntry.attachments.length > 0)) {
+            if (cacheEntry.outlinks.length > 0 || (this.showAttachments && cacheEntry.attachments.length > 0)) {
                 const outlinksUl = currentEl.createEl('ul', { cls: 'outlink-outlinks' });
     
-                // Only render attachments if showAttachments is true
-                if (this.settings.showAttachments) {
-                    this.renderAttachments(outlinksUl, cacheEntry.attachments);
+                // Render attachments for the current outlink
+                if (this.showAttachments) {
+                    const newAttachments = this.getNewAttachments(currentFile.path, cacheEntry.attachments, processedAttachments);
+                    if (newAttachments.length > 0) {
+                        this.renderAttachments(outlinksUl, newAttachments);
+                    }
                 }
     
                 for (const outlink of cacheEntry.outlinks) {
@@ -979,13 +1018,13 @@ export default class LinkNavigationPlugin extends Plugin {
                         
                         li.createEl('span', { text: '→ ' });
                         const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
-
-                        // Only render tags if showTags is true
+    
+                        // Render tags if showTags is true
                         if (this.showTags) {
                             const outlinkCacheEntry = await this.cacheLinkData(linkedFile);
                             this.renderTags(li, outlinkCacheEntry.tags);
                         }
-
+    
                         link.addEventListener('click', async (e) => {
                             e.preventDefault();
                             if (e.metaKey || e.ctrlKey) {
@@ -994,11 +1033,34 @@ export default class LinkNavigationPlugin extends Plugin {
                                 this.app.workspace.getLeaf().openFile(linkedFile);
                             }
                         });
+    
+                        // Render attachments for this outlink (outlink of outlink)
+                        if (this.showAttachments) {
+                            const outlinkCacheEntry = await this.cacheLinkData(linkedFile);
+                            const newAttachments = this.getNewAttachments(linkedFile.path, outlinkCacheEntry.attachments, processedAttachments);
+                            if (newAttachments.length > 0) {
+                                const attachmentsContainer = li.createEl('div', { cls: 'outlink-attachments' });
+                                this.renderAttachments(attachmentsContainer, newAttachments);
+                            }
+                        }
+    
                         queue.push({ file: linkedFile, depth: depth + 1, element: li });
                     }
                 }
             }
         }
+    }
+    
+    private getNewAttachments(filePath: string, attachments: string[], processedAttachments: Map<string, Set<string>>): string[] {
+        if (!processedAttachments.has(filePath)) {
+            processedAttachments.set(filePath, new Set());
+        }
+        const fileProcessedAttachments = processedAttachments.get(filePath)!;
+        
+        const newAttachments = attachments.filter(attachment => !fileProcessedAttachments.has(attachment));
+        newAttachments.forEach(attachment => fileProcessedAttachments.add(attachment));
+        
+        return newAttachments;
     }
 
     // 3.3.3 Render Canvas Links
@@ -1176,6 +1238,14 @@ export default class LinkNavigationPlugin extends Plugin {
         800,
         true
     );
+
+    updateDetailedView() {
+        const activeFile = this.app.workspace.getActiveFile();
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (activeFile && view && this.detailsEl) {
+            this.renderDetailedView(this.detailsEl, activeFile);
+        }
+    }
 }
 
 class LinkNavigationSettingTab extends PluginSettingTab {
@@ -1194,9 +1264,9 @@ class LinkNavigationSettingTab extends PluginSettingTab {
             .setName('Search canvas links')
             .setDesc('Enable or disable searching for links in Canvas files')
             .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.searchCanvasLinks)
+                .setValue(this.plugin.settings.showCanvasLinks)
                 .onChange(async (value) => {
-                    this.plugin.settings.searchCanvasLinks = value;
+                    this.plugin.settings.showCanvasLinks = value;
                     await this.plugin.saveSettings();
                 }));
         
@@ -1207,13 +1277,7 @@ class LinkNavigationSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showAttachments)
                 .onChange(async (value) => {
                     this.plugin.settings.showAttachments = value;
-                    this.plugin.showAttachments = value;
                     await this.plugin.saveSettings();
-                    // Trigger a re-render of the current view
-                    const activeFile = this.app.workspace.getActiveFile();
-                    if (activeFile) {
-                        this.plugin.updateLinkNavigation(activeFile, true);
-                    }
                 }));
 
         new Setting(containerEl)
@@ -1223,14 +1287,9 @@ class LinkNavigationSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showTags)
                 .onChange(async (value) => {
                     this.plugin.settings.showTags = value;
-                    this.plugin.showTags = value;
                     await this.plugin.saveSettings();
-                    // Trigger a re-render of the current view
-                    const activeFile = this.app.workspace.getActiveFile();
-                    if (activeFile) {
-                        this.plugin.updateLinkNavigation(activeFile, true);
-                    }
                 }));
+
 
         new Setting(containerEl)
             .setName('Cache timeout')

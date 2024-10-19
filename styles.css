@@ -560,6 +560,7 @@
 .attachments-list {
     margin-left: 0px;
     list-style-type: none;
+    padding: 0;
 }
 
 .attachment {
@@ -637,3 +638,14 @@
 .link-navigator-tags .tag:hover {
     background-color: var(--background-modifier-hover);
 }
+
+.outlink-attachments {
+    padding-left: 40px;
+}
+
+.inlink-attachments {
+    margin-left: 40px;
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
