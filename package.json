@@ -1,6 +1,6 @@
 {
 	"name": "link-navigation",
-	"version": "0.0.9",
+	"version": "0.0.10",
 	"description": "Navigate between incoming links (inlinks), outgoing links (outlinks) N levels deep. Links from Canvas are also supported.",
 	"main": "main.js",
 	"scripts": {
