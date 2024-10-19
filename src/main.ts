@@ -1,8 +1,3 @@
-
-// DONE: Better refresh when enabling buttons from settings
-// DONE: Tags which are found under current note hsould be shown not under outlinks but under current note itself
-// DONE: When Outlinks of inlinks is enabled sometimes it also finds attachments
-
 import { App, Menu, Notice, Plugin, PluginSettingTab, Setting, debounce, TFile, MarkdownView, ButtonComponent, TextComponent} from 'obsidian';
 
 interface LinkNavigationSettings {
