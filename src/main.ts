@@ -1,25 +1,55 @@
-import { App, Menu, Notice, Plugin, PluginSettingTab, Setting, debounce, TFile, MarkdownView, ButtonComponent, TextComponent} from 'obsidian';
+import { App, Menu, Notice, Plugin, PluginSettingTab, Setting, debounce, TFile, MarkdownView, ButtonComponent, TextComponent, Modal, getIcon, getIconIds, setIcon } from 'obsidian';
 
 interface LinkNavigationSettings {
-    searchCanvasLinks: boolean;
+    isCanvasLinksEnabled: boolean; // Controls visibility of the toggle button
+    isAttachmentsEnabled: boolean; // Controls visibility of the toggle button
+    isTagsEnabled: boolean; // Controls visibility of the toggle button
+    toggleCanvasLinks?: boolean;    // State of the canvas links toggle
+    toggleAttachments?: boolean;   // State of the attachments toggle
+    toggleTags?: boolean;          // State of the tags toggle
+
     cacheTimeout: number;
-    showCanvasLinks: boolean;
     showCacheCleanupNotice: boolean;
     cacheCleanupInterval: number;
-    showAttachments: boolean;
-    showTags: boolean;
+    inlinkFormat: string;
+    outlinkFormat: string;
+    showInlinkCount: boolean;
+    showOutlinkCount: boolean;
+    inlinkText: string;
+    outlinkText: string;
+    inlinkArrow: string;
+    outlinkArrow: string;
+    inlinkCustomClass: string;
+    outlinkCustomClass: string;
+    inlinkIcon: string;
+    outlinkIcon: string;
 }
 
 type TimeoutId = ReturnType<typeof setTimeout>;
 
 const DEFAULT_SETTINGS: LinkNavigationSettings = {
-    searchCanvasLinks: true,
+    isCanvasLinksEnabled: true,
+    isAttachmentsEnabled: true,
+    isTagsEnabled: true,
+    toggleCanvasLinks: undefined,  // Initially undefined
+    toggleAttachments: undefined, // Initially undefined
+    toggleTags: undefined,       // Initially undefined
+
     cacheTimeout: 5 * 60 * 1000, // 5 minutes
-    showCanvasLinks: true,
     cacheCleanupInterval: 5, // 5 minutes
     showCacheCleanupNotice: true,
-    showAttachments: true,
-    showTags: true
+    inlinkFormat: "{arrow} {label} ({count})",
+    outlinkFormat: "{label} ({count}) {arrow}",
+    showInlinkCount: true,
+    showOutlinkCount: true,
+    inlinkText: "INLINKS",
+    outlinkText: "OUTLINKS",
+    inlinkArrow: "←",
+    outlinkArrow: "→",
+    inlinkCustomClass: "",
+    outlinkCustomClass: "",
+    inlinkIcon: "arrow-left-circle",  // Default inlink icon
+    outlinkIcon: "arrow-right-circle", // Default outlink icon
 }
 
 interface CacheEntry {
@@ -29,6 +59,84 @@ interface CacheEntry {
     attachments: string[];
     tags: string[];
     timestamp: number;
+}
+class IconPickerModal extends Modal {
+    private plugin: LinkNavigationPlugin;
+    private settingKey: 'inlinkIcon' | 'outlinkIcon';
+    private iconInput: TextComponent;
+    private iconList: HTMLElement; // Reference to the icon list container
+    private searchInput: TextComponent;
+
+    constructor(app: App, plugin: LinkNavigationPlugin, settingKey: 'inlinkIcon' | 'outlinkIcon', iconInput: TextComponent) {
+        super(app);
+        this.plugin = plugin;
+        this.settingKey = settingKey;
+        this.iconInput = iconInput;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.createEl('h2', { text: 'Select a Lucide Icon' });
+
+        this.searchInput = new TextComponent(contentEl)
+            .setPlaceholder('Search for icons...');
+        this.searchInput.inputEl.style.width = '100%';
+        this.searchInput.onChange(debounce(() => {
+            this.updateIconList(this.searchInput.getValue());
+        }, 50, false));
+
+        this.iconList = contentEl.createEl('div', { cls: 'icon-picker-list' });
+        this.iconList.style.overflowY = 'scroll';
+        this.iconList.style.maxHeight = '300px';
+        this.iconList.style.border = '1px solid var(--background-modifier-border)';
+
+        // Initial empty list (or a loading indicator)
+        this.updateIconList("");
+    }
+
+
+    updateIconList(filter: string) {
+        requestAnimationFrame(() => {
+            this.iconList.empty(); // Clear previous results
+
+            const filterLower = filter.toLowerCase();
+            const allIconIds = getIconIds();
+            const filteredIcons = allIconIds.filter(id => id.toLowerCase().includes(filterLower));
+
+            if (filteredIcons.length === 0 && filter !== "") {
+                this.iconList.createEl('div', { text: 'No icons found.', cls: 'icon-picker-item' });
+            } else {
+                filteredIcons.forEach(iconId => {
+                    const iconItem = this.iconList.createEl('div', { cls: 'icon-picker-item' });
+                    iconItem.style.display = 'flex';
+                    iconItem.style.alignItems = 'center';
+                    iconItem.style.padding = '5px';
+                    iconItem.style.cursor = 'pointer';
+
+                    const iconEl = iconItem.createEl('span', { cls: 'icon-picker-icon' });
+                    iconEl.style.marginRight = '10px';
+                    setIcon(iconEl, iconId);
+
+                    iconItem.createEl('span', { text: iconId });
+
+                    // Corrected: Use this.registerDomEvent (within the modal)
+                    this.plugin.registerDomEvent(iconItem, 'click', () => {
+                        this.plugin.settings[this.settingKey] = iconId;
+                        this.plugin.saveSettings();
+                        this.iconInput.setValue(iconId);
+                        this.close();
+                    });
+                });
+            }
+        });
+    }
+
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
 }
 
 export default class LinkNavigationPlugin extends Plugin {
@@ -40,11 +148,11 @@ export default class LinkNavigationPlugin extends Plugin {
     private outlinksEl: HTMLElement | null = null;
     private detailsEl: HTMLElement | null = null;
     private isDetailsVisible = false;
-    private showCanvasLinks = true;
+    private toggleCanvasLinks = true; // Tracks the *state* of the Canvas Links toggle
     private outlinksOfInlinksVisible = false;
     private shouldShowDetailedView = false;
-    private showAttachments = true;
-    private showTags = false;
+    private toggleAttachments = true; // Tracks the *state* of the Attachments toggle
+    private toggleTags = false; // Tracks the *state* of the Tags toggle
 
     // Add Cache
     private cache: Map<string, CacheEntry> = new Map();
@@ -55,16 +163,18 @@ export default class LinkNavigationPlugin extends Plugin {
     private cacheCleanupInterval: TimeoutId | null = null;
     private lastCleanupNotice = 0;
     private readonly CLEANUP_NOTICE_COOLDOWN = 5000; // 5 seconds cooldown
+    inlinkIconTextComponent: TextComponent | null = null;
+    outlinkIconTextComponent: TextComponent | null = null;
 
     async onload() {
         await this.loadSettings();
         this.addSettingTab(new LinkNavigationSettingTab(this.app, this));
 
-        // Load saved toggle states
-        this.showCanvasLinks = this.settings.showCanvasLinks;
-        this.showAttachments = this.settings.showAttachments;
-        this.showTags = this.settings.showTags;
-        
+        // Load saved toggle states correctly.  Use settings directly.
+        this.toggleCanvasLinks = this.settings.toggleCanvasLinks ?? this.settings.isCanvasLinksEnabled;
+        this.toggleAttachments = this.settings.toggleAttachments ?? this.settings.isAttachmentsEnabled;
+        this.toggleTags = this.settings.toggleTags ?? this.settings.isTagsEnabled;
+
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
                 if (file instanceof TFile) {
@@ -72,7 +182,7 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             })
         );
-        
+
         // Following makes header blink. Look into better options to detect change.
         // To update the DetailedView when new links are created, we'll need 
         // to listen for file changes and update the cache accordingly.
@@ -111,12 +221,12 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             }
         });
-        
+
         document.addEventListener('keydown', this.handleEscapeKey);
 
         this.setupCacheCleanup();
-
     }
+
 
     onunload() {
         this.removeLinkNavigation();
@@ -128,101 +238,156 @@ export default class LinkNavigationPlugin extends Plugin {
         this.shouldShowDetailedView = false;
 
         document.removeEventListener('keydown', this.handleEscapeKey);
-        
+
         // Remove periodic cache cleanup interval
         if (this.cacheCleanupInterval !== null) {
             clearInterval(this.cacheCleanupInterval);
             this.cacheCleanupInterval = null;
         }
-        
+
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        // Load settings and merge with defaults
+        const loadedSettings = await this.loadData();
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
+
+        // Ensure toggle states are loaded if they exist, otherwise use is...Enabled as fallback
+        this.settings.toggleCanvasLinks = loadedSettings?.toggleCanvasLinks ?? DEFAULT_SETTINGS.isCanvasLinksEnabled;
+        this.settings.toggleAttachments = loadedSettings?.toggleAttachments ?? DEFAULT_SETTINGS.isAttachmentsEnabled;
+        this.settings.toggleTags = loadedSettings?.toggleTags ?? DEFAULT_SETTINGS.isTagsEnabled;
     }
 
     async saveSettings() {
         await this.saveData(this.settings);
     }
-    
-    // 1. Show LinkNavigation in the header
+
+    async updateSettings(updates: Partial<LinkNavigationSettings>) {
+        Object.assign(this.settings, updates);
+        await this.saveSettings();
+    }
+
+
+    // Helper function to format the link text
+    formatLinkText(format: string, label: string, count: number, arrow: string, showCount: boolean, iconId: string): string {
+        let text = format.replace("{label}", label);
+        text = text.replace("{arrow}", arrow);
+
+        if (format.includes("{icon}")) {
+            if (getIcon(iconId)) {
+                // Create the icon span *within* formatLinkText
+                const iconSpan = `<span class="link-navigator-icon">${getIcon(iconId)!.outerHTML}</span>`;
+                text = text.replace("{icon}", iconSpan);
+            } else {
+                console.warn(`Link Navigator: Invalid icon ID: ${iconId}`);
+                text = text.replace("{icon}", '<span class="link-navigator-icon">�</span>'); // Placeholder
+            }
+        } else {
+            text = text.replace("{icon}", ""); // Remove placeholder if not used
+        }
+
+        text = showCount ? text.replace("{count}", count.toString()) : text.replace(/(\(|\)|\[|\]|\{|\})?\s*\{count\}\s*(\(|\)|\[|\]|\{|\})?/, "");
+        return text;
+    }
+
+
     async updateLinkNavigation(file: TFile, forceRefresh = false) {
         if (forceRefresh) {
             this.invalidateCache(file);
         }
-    
+
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || !(view instanceof MarkdownView)) return;
-    
+
         const viewHeader = view.containerEl.querySelector('.view-header');
         const viewContent = view.containerEl.querySelector('.view-content');
         if (!viewHeader || !viewContent) return;
-    
+
         const viewHeaderTitle = viewHeader.querySelector('.view-header-title');
         if (!viewHeaderTitle) return;
-    
+
         this.removeLinkNavigation();
-    
+
         // Create elements
         this.inlinksEl = document.createElement('div');
         this.outlinksEl = document.createElement('div');
         this.inlinksEl.classList.add('link-navigator-inlinks', 'link-navigator-visible');
         this.outlinksEl.classList.add('link-navigator-outlinks', 'link-navigator-visible');
-        this.inlinksEl.textContent = 'INLINKS (0)';
-        this.outlinksEl.textContent = 'OUTLINKS (0)';
-    
+
+        // Apply custom classes, if any
+        if (this.settings.inlinkCustomClass) {
+            this.inlinksEl.classList.add(...this.settings.inlinkCustomClass.split(" ").filter(Boolean));
+        }
+        if (this.settings.outlinkCustomClass) {
+            this.outlinksEl.classList.add(...this.settings.outlinkCustomClass.split(" ").filter(Boolean));
+        }
+
         // Create mobile container
         const mobileContainer = document.createElement('div');
         mobileContainer.classList.add('mobile-link-navigator');
-        mobileContainer.appendChild(this.inlinksEl.cloneNode(true));
-        mobileContainer.appendChild(this.outlinksEl.cloneNode(true));
-    
+        const mobileInlinksEl = this.inlinksEl.cloneNode(true) as HTMLElement;
+        const mobileOutlinksEl = this.outlinksEl.cloneNode(true) as HTMLElement;
+        mobileContainer.appendChild(mobileInlinksEl);
+        mobileContainer.appendChild(mobileOutlinksEl);
+
+
         // Add to both desktop and mobile locations
         viewHeaderTitle.before(this.inlinksEl);
         viewHeaderTitle.after(this.outlinksEl);
         viewContent.prepend(mobileContainer);
-    
+
         try {
             const { inlinks, outlinks, canvasLinks } = await this.cacheLinkData(file);
-    
+
             requestAnimationFrame(() => {
                 if (this.inlinksEl && this.outlinksEl) {
                     const totalOutlinks = outlinks.length + canvasLinks.length;
+
                     const updateText = (el: HTMLElement) => {
                         if (el.classList.contains('link-navigator-inlinks')) {
-                            el.textContent = `← INLINKS (${inlinks.length})`;
+                            el.innerHTML = this.formatLinkText(
+                                this.settings.inlinkFormat,
+                                this.settings.inlinkText,
+                                inlinks.length,
+                                this.settings.inlinkArrow,
+                                this.settings.showInlinkCount,
+                                this.settings.inlinkIcon // Pass the icon ID
+                            );
                         } else if (el.classList.contains('link-navigator-outlinks')) {
-                            el.textContent = `OUTLINKS (${totalOutlinks}) →`;
+                            el.innerHTML = this.formatLinkText(
+                                this.settings.outlinkFormat,
+                                this.settings.outlinkText,
+                                totalOutlinks,
+                                this.settings.outlinkArrow,
+                                this.settings.showOutlinkCount,
+                                this.settings.outlinkIcon  // Pass the icon ID
+                            );
                         }
                     };
-    
+
                     // Update both desktop and mobile elements
-                    [this.inlinksEl, this.outlinksEl, ...Array.from(mobileContainer.children)].forEach((el) => {
-                        if (el instanceof HTMLElement) {
-                            updateText(el);
-                        }
-                    });
-    
+                    updateText(this.inlinksEl);
+                    updateText(this.outlinksEl);
+                    updateText(mobileInlinksEl);
+                    updateText(mobileOutlinksEl);
+
+
                     this.setupHoverPreview(this.inlinksEl, inlinks, 'Inlinks');
                     this.setupHoverPreview(this.outlinksEl, [...outlinks, ...canvasLinks], 'Outlinks');
-                    
+
                     // Setup hover for mobile elements too
-                    const mobileInlink = mobileContainer.querySelector('.link-navigator-inlinks');
-                    const mobileOutlink = mobileContainer.querySelector('.link-navigator-outlinks');
-                    if (mobileInlink && mobileOutlink) {
-                        this.setupHoverPreview(mobileInlink as HTMLElement, inlinks, 'Inlinks');
-                        this.setupHoverPreview(mobileOutlink as HTMLElement, [...outlinks, ...canvasLinks], 'Outlinks');
-                    }
+                    this.setupHoverPreview(mobileInlinksEl, inlinks, 'Inlinks');
+                    this.setupHoverPreview(mobileOutlinksEl, [...outlinks, ...canvasLinks], 'Outlinks');
+
                     if (this.shouldShowDetailedView) {
                         this.toggleDetailedView(view, file);
                     }
 
                     this.updateDetailedViewState(view, file);
-                    
                     this.adjustLayout_insideExpandedDetailedView(viewHeader, viewHeaderTitle);
                 }
-                
                 this.adjustLayout_insideExpandedDetailedView(viewHeader, viewHeaderTitle);
+
             });
 
             document.addEventListener('click', this.handleClickOutside);
@@ -237,11 +402,11 @@ export default class LinkNavigationPlugin extends Plugin {
         if (this.inlinksEl) this.inlinksEl.remove();
         if (this.outlinksEl) this.outlinksEl.remove();
         if (this.detailsEl) this.detailsEl.remove();
-        
+
         // Remove mobile container if it exists
         const mobileContainer = document.querySelector('.mobile-link-navigator');
         if (mobileContainer) mobileContainer.remove();
-    
+
         this.inlinksEl = null;
         this.outlinksEl = null;
         this.detailsEl = null;
@@ -250,38 +415,38 @@ export default class LinkNavigationPlugin extends Plugin {
     // 1.2 Store inlinks and outlinks of a file in the cache
     private async cacheLinkData(file: TFile): Promise<CacheEntry> {
         const cacheKey = file.path;
-        
+
         if (this.cache.has(cacheKey) && !this.dirtyCache.has(cacheKey)) {
             const cachedEntry = this.cache.get(cacheKey);
             if (cachedEntry && Date.now() - cachedEntry.timestamp < this.settings.cacheTimeout) {
                 return cachedEntry;
             }
         }
-    
+
         if (this.loadingPromises.has(cacheKey)) {
             return this.loadingPromises.get(cacheKey) ?? this.getLinks(file);
         }
-    
+
         const loadingPromise = this.getLinks(file);
         this.loadingPromises.set(cacheKey, loadingPromise);
-    
+
         try {
             const result = await Promise.race([
                 loadingPromise,
-                new Promise<never>((_, reject) => 
+                new Promise<never>((_, reject) =>
                     setTimeout(() => reject(new Error('Loading timeout')), 10000)
                 )
             ]);
-    
+
             this.cache.set(cacheKey, { ...result, timestamp: Date.now() });
             this.loadingPromises.delete(cacheKey);
-    
+
             if (this.cache.size > this.maxCacheSize) {
                 const oldestKey = Array.from(this.cache.entries())
                     .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0]?.[0];
                 if (oldestKey) this.cache.delete(oldestKey);
             }
-    
+
             return result;
         } catch (error) {
             this.loadingPromises.delete(cacheKey);
@@ -296,7 +461,7 @@ export default class LinkNavigationPlugin extends Plugin {
         const canvasLinks = new Set<string>();
         const attachments = new Set<string>();
         const tags = new Set<string>();
-    
+
         // Use Obsidian API to get inlinks
         const resolvedLinks = this.app.metadataCache.resolvedLinks;
         for (const [sourcePath, targetLinks] of Object.entries(resolvedLinks)) {
@@ -307,7 +472,7 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             }
         }
-    
+
         // Use Obsidian API to get outlinks
         const fileCache = this.app.metadataCache.getFileCache(file);
         if (fileCache) {
@@ -317,14 +482,14 @@ export default class LinkNavigationPlugin extends Plugin {
                     this.addLinkToAppropriateSet(link.link, outlinks, canvasLinks);
                 }
             }
-    
+
             // Check embedded links in the main content
             if (fileCache.embeds) {
                 for (const embed of fileCache.embeds) {
                     this.addLinkToAppropriateSet(embed.link, outlinks, canvasLinks);
                 }
             }
-    
+
             // Check links and embeds in the frontmatter
             if (fileCache.frontmatter) {
                 const frontmatterContent = JSON.stringify(fileCache.frontmatter);
@@ -335,9 +500,9 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             }
         }
-    
+
         // If searchCanvasLinks is enabled, search Canvas files for links to this file
-        if (this.settings.searchCanvasLinks) {
+        if (this.settings.isCanvasLinksEnabled) {
             const canvasFiles = this.app.vault.getFiles().filter(f => f.extension === 'canvas');
             for (const canvasFile of canvasFiles) {
                 const content = await this.app.vault.read(canvasFile);
@@ -348,24 +513,24 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             }
         }
-    
+
         // Define a regex pattern for all supported file types
         const supportedExtensions = [
             // Images
             'avif', 'bmp', 'gif', 'jpeg', 'jpg', 'png', 'svg', 'webp', 'tif', 'tiff', 'psd', 'dng', 'heif', 'heic', 'cr2', 'nef', 'ico',
-            
+
             // Audio
             'flac', 'm4a', 'mp3', 'ogg', 'wav', 'webm', '3gp',
-            
+
             // Video
             'mkv', 'mov', 'mp4', 'ogv', 'avi',
-            
+
             // Documents
             'pdf', 'doc', 'docx', 'xlsx', 'pptx', 'djvu', 'epub',
-            
+
             // Archives
             'zip', '7z', 'tar', 'gz', 'rar', 'xc', 'bzip2', 'iso', 'cmg', 'msi',
-            
+
             // Programming
             'py', 'js', 'ts', 'html', 'css', 'json', 'xml', 'java', 'cpp', 'cs', 'rb', 'php', 'swift', 'go', 'rs', 'sh'
         ].join('|');
@@ -408,13 +573,13 @@ export default class LinkNavigationPlugin extends Plugin {
             }
         }
 
-        return { 
-            inlinks: Array.from(inlinks), 
-            outlinks: Array.from(outlinks), 
+        return {
+            inlinks: Array.from(inlinks),
+            outlinks: Array.from(outlinks),
             canvasLinks: Array.from(canvasLinks),
             attachments: Array.from(attachments),
             tags: Array.from(tags),
-            timestamp: Date.now() 
+            timestamp: Date.now()
         };
     }
 
@@ -422,7 +587,7 @@ export default class LinkNavigationPlugin extends Plugin {
     private addLinkToAppropriateSet(link: string, outlinks: Set<string>, canvasLinks: Set<string>) {
         // Remove any header information from the link
         const linkWithoutHeader = link.split('#')[0];
-        
+
         const linkedFile = this.app.metadataCache.getFirstLinkpathDest(linkWithoutHeader, '');
         if (linkedFile instanceof TFile) {
             if (linkedFile.extension === 'canvas') {
@@ -435,40 +600,40 @@ export default class LinkNavigationPlugin extends Plugin {
 
     // 1.5
     private renderAttachments(parentEl: HTMLElement, attachments: string[]) {
-        if (!this.settings.showAttachments || attachments.length === 0) return;
-        
+        if (!this.toggleAttachments || attachments.length === 0) return; // Use toggle state
+
         const attachmentsUl = parentEl.createEl('ul', { cls: 'attachments-list' });
         attachments.forEach(attachment => {
             const li = attachmentsUl.createEl('li', { cls: 'attachment' });
             const ext = attachment.split('.').pop()?.toLowerCase();
             let icon = '📎';
-            
+
             const iconMap: { [key: string]: string } = {
                 // Images
                 'avif': '🖼️', 'bmp': '🖼️', 'gif': '🖼️', 'jpeg': '🖼️', 'jpg': '🖼️', 'png': '🖼️', 'svg': '🖼️', 'webp': '🖼️',
                 'tif': '🖼️', 'tiff': '🖼️', 'psd': '🖼️', 'dng': '🖼️', 'heif': '🖼️', 'heic': '🖼️', 'cr2': '🖼️', 'nef': '🖼️', 'ico': '🖼️',
-                
+
                 // Audio
                 'flac': '🎵', 'm4a': '🎵', 'mp3': '🎵', 'ogg': '🎵', 'wav': '🎵', '3gp': '🎵',
-                
+
                 // Video
                 'mkv': '🎥', 'mov': '🎥', 'mp4': '🎥', 'ogv': '🎥', 'webm': '🎥', 'avi': '🎥',
-                
+
                 // Documents
                 'pdf': '📄', 'doc': '📄', 'docx': '📄', 'xlsx': '📊', 'pptx': '📊', 'djvu': '📚', 'epub': '📚',
-                
+
                 // Archives
                 'zip': '🗜️', '7z': '🗜️', 'tar': '🗜️', 'gz': '🗜️', 'rar': '🗜️', 'xc': '🗜️', 'bzip2': '🗜️', 'iso': '💿', 'cmg': '💿', 'msi': '💿',
-                
+
                 // Programming (single icon for all)
                 'py': '💻', 'js': '💻', 'ts': '💻', 'html': '💻', 'css': '💻', 'json': '💻', 'xml': '💻', 'java': '💻', 'cpp': '💻', 'cs': '💻',
                 'rb': '💻', 'php': '💻', 'swift': '💻', 'go': '💻', 'rs': '💻', 'sh': '💻'
             };
-            
+
             if (ext && ext in iconMap) {
                 icon = iconMap[ext];
             }
-            
+
             li.createEl('span', { text: `${icon} `, cls: 'attachment-icon' });
             const attachmentLink = li.createEl('a', { text: attachment, cls: 'internal-link' });
             attachmentLink.addEventListener('click', (e) => {
@@ -479,13 +644,13 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             });
         });
-        
+
     }
 
     // 1.6
     private renderTags(parentEl: HTMLElement, tags: string[]) {
-        if (!this.showTags || tags.length === 0) return;
-        
+        if (!this.toggleTags || tags.length === 0) return;  // Use toggle state
+
         const tagsContainer = parentEl.createEl('div', { cls: 'link-navigator-tags' });
         tags.forEach(tag => {
             const tagEl = tagsContainer.createEl('div', { cls: 'tag', text: `${tag}` });
@@ -499,17 +664,17 @@ export default class LinkNavigationPlugin extends Plugin {
     // 2. Allow user to hover over the LinkNavigation and get a preview
     setupHoverPreview(element: HTMLElement, links: string[], title: string) {
         if (links.length === 0) return; // Don't set up hover preview for empty links
-    
+
         let hoverTimeout: TimeoutId;
         let menu: Menu | null = null;
-        
+
         element.addEventListener('mouseenter', (event) => {
             if (!this.isDetailsVisible) {
                 hoverTimeout = setTimeout(() => {
                     menu = new Menu();
                     menu.addItem((item) => item.setTitle(title).setDisabled(true));
                     links.forEach(link => {
-                        menu?.addItem((item) => 
+                        menu?.addItem((item) =>
                             item.setTitle(link).onClick(() => {
                                 const targetFile = this.app.metadataCache.getFirstLinkpathDest(link, '/');
                                 if (targetFile) {
@@ -522,7 +687,7 @@ export default class LinkNavigationPlugin extends Plugin {
                 }, 900);
             }
         });
-    
+
         element.addEventListener('mouseleave', () => {
             clearTimeout(hoverTimeout);
             if (menu) {
@@ -552,7 +717,7 @@ export default class LinkNavigationPlugin extends Plugin {
         }
 
         const detailsInner = this.detailsEl.querySelector('.link-navigator-details') as HTMLElement;
-        
+
         if (this.shouldShowDetailedView) {
             detailsInner.classList.remove('hidden');
             detailsInner.classList.add('visible');
@@ -565,7 +730,7 @@ export default class LinkNavigationPlugin extends Plugin {
         this.updateClickHandlers(view);
 
     }
-    
+
 
     // 3.0.1
     private updateClickHandlers(view: MarkdownView) {
@@ -575,10 +740,10 @@ export default class LinkNavigationPlugin extends Plugin {
                 element.addEventListener('click', this.toggleDetailedViewHandler);
             }
         };
-    
+
         addClickHandler(this.inlinksEl);
         addClickHandler(this.outlinksEl);
-    
+
         const mobileContainer = view.containerEl.querySelector('.mobile-link-navigator');
         if (mobileContainer) {
             const mobileInlinks = mobileContainer.querySelector('.link-navigator-inlinks');
@@ -597,7 +762,7 @@ export default class LinkNavigationPlugin extends Plugin {
             this.toggleDetailedView(view, file);
         }
     };
-    
+
     // 3.0.3
     private handleEscapeKey = (event: KeyboardEvent) => {
         if (event.key === 'Escape' && this.shouldShowDetailedView) {
@@ -608,7 +773,7 @@ export default class LinkNavigationPlugin extends Plugin {
             }
         }
     };
-    
+
     // 3.1 Render DetailedView elements: Depth, Refresh button, Canvas Links toggle button.
     //     And fill it with inlinks, backlinks, canvas links information
     async renderDetailedView(containerEl: HTMLElement, file: TFile) {
@@ -632,9 +797,9 @@ export default class LinkNavigationPlugin extends Plugin {
                     await this.updateDetailedViewContent(containerEl, file);
                 }
             });
-    
+
         const buttonContainer = depthAndButtonsWrapper.createDiv('button-container');
-    
+
         // Add refresh button
         new ButtonComponent(buttonContainer)
             .setIcon('refresh-cw')
@@ -643,25 +808,24 @@ export default class LinkNavigationPlugin extends Plugin {
                 this.cache.delete(file.path);
                 this.updateLinkNavigation(file);
             });
-    
-        // Canvas Links toggle
-        if (this.settings.showCanvasLinks) {
+
+        // Canvas Links toggle (use isCanvasLinksEnabled for visibility, toggleCanvasLinks for state)
+        if (this.settings.isCanvasLinksEnabled) {
             const canvasLinksToggle = new ButtonComponent(buttonContainer)
                 .setButtonText('Canvas links')
                 .setClass('canvas-links-toggle')
                 .onClick(async () => {
-                    this.showCanvasLinks = !this.showCanvasLinks;
-                    canvasLinksToggle.buttonEl.classList.toggle('active');
+                    this.toggleCanvasLinks = !this.toggleCanvasLinks;
+                    canvasLinksToggle.buttonEl.classList.toggle('active', this.toggleCanvasLinks);
+                    await this.updateSettings({ toggleCanvasLinks: this.toggleCanvasLinks }); // SAVE STATE
                     this.updateDetailedViewContent(containerEl, file);
                 });
 
-            if (this.showCanvasLinks) {
-                canvasLinksToggle.buttonEl.classList.add('active');
-            }
+            canvasLinksToggle.buttonEl.classList.toggle('active', this.toggleCanvasLinks);
         }
-    
+
         containerEl.createDiv('link-navigator-content');
-    
+
         // Add Outlinks of Inlinks toggle button
         const outlinksOfInlinksToggle = new ButtonComponent(buttonContainer)
             .setIcon('git-branch')
@@ -679,36 +843,34 @@ export default class LinkNavigationPlugin extends Plugin {
             outlinksOfInlinksToggle.buttonEl.classList.add('active');
         }
 
-        // Attachments toggle
-        if (this.settings.showAttachments) {
+        // Attachments toggle (use isAttachmentsEnabled for visibility, toggleAttachments for state)
+        if (this.settings.isAttachmentsEnabled) {
             const attachmentsToggle = new ButtonComponent(buttonContainer)
                 .setIcon('paperclip')
                 .setTooltip('Toggle attachments')
                 .onClick(async () => {
-                    this.showAttachments = !this.showAttachments;
-                    attachmentsToggle.buttonEl.classList.toggle('active');
+                    this.toggleAttachments = !this.toggleAttachments;
+                    attachmentsToggle.buttonEl.classList.toggle('active', this.toggleAttachments);
+                    await this.updateSettings({ toggleAttachments: this.toggleAttachments }); // SAVE STATE
                     this.updateDetailedViewContent(containerEl, file);
                 });
 
-            if (this.showAttachments) {
-                attachmentsToggle.buttonEl.classList.add('active');
-            }
+            attachmentsToggle.buttonEl.classList.toggle('active', this.toggleAttachments);
         }
 
-        // Add Tags toggle
-        if (this.settings.showTags) {
+        // Add Tags toggle (use isTagsEnabled for visibility, toggleTags for state)
+        if (this.settings.isTagsEnabled) {
             const tagsToggle = new ButtonComponent(buttonContainer)
                 .setIcon('tag')
                 .setTooltip('Toggle tags')
-                .onClick(() => {
-                    this.showTags = !this.showTags;
-                    tagsToggle.buttonEl.classList.toggle('active');
+                .onClick(async () => {
+                    this.toggleTags = !this.toggleTags;
+                    tagsToggle.buttonEl.classList.toggle('active', this.toggleTags);
+                    await this.updateSettings({ toggleTags: this.toggleTags }); // SAVE STATE
                     this.updateDetailedViewContent(containerEl, file);
                 });
 
-            if (this.showTags) {
-                tagsToggle.buttonEl.classList.add('active');
-            }
+            tagsToggle.buttonEl.classList.toggle('active', this.toggleTags);
         }
         // Initial content render
         await this.updateDetailedViewContent(containerEl, file);
@@ -719,12 +881,12 @@ export default class LinkNavigationPlugin extends Plugin {
     private async updateDetailedViewContent(containerEl: HTMLElement, file: TFile) {
         const contentEl = containerEl.querySelector('.link-navigator-content');
         if (!contentEl || !(contentEl instanceof HTMLElement)) return;
-    
+
         contentEl.empty();
 
         const hierarchyEl = contentEl.createDiv('link-hierarchy');
         await this.renderLinkHierarchy(hierarchyEl, file);
-    
+
     }
 
     // 3.3 Create unordered list for each found link:
@@ -734,25 +896,25 @@ export default class LinkNavigationPlugin extends Plugin {
     private async renderLinkHierarchy(containerEl: HTMLElement, file: TFile) {
         containerEl.empty();
         const hierarchyUl = containerEl.createEl('ul');
-    
+
         const cacheEntry = await this.cacheLinkData(file);
-    
+
         // Render inlinks and get the depth at which they end
         const inlinksDepth = await this.renderInlinksIterativelyWithOutlinks(file, hierarchyUl, this.maxDepth);
-    
+
         // Calculate the indent for the current note based on the inlinks depth
         // const currentNoteIndent = inlinksDepth * 20; // Assuming 20px indent per level
-    
+
         // Render current note
         const indentLevel = inlinksDepth;
-        const currentLi = hierarchyUl.createEl('li', { 
-            cls: `current-note indent-${indentLevel}` 
+        const currentLi = hierarchyUl.createEl('li', {
+            cls: `current-note indent-${indentLevel}`
         });
-        currentLi.createEl('span', { text: '\u00A0\u00A0\u00A0 •\u00A0\u00A0' });
+        currentLi.createEl('span', { text: '\u00A0\u00A0\u00A0 •\u00A0\u00A0' }); //Consistent Indentation
         currentLi.createEl('strong', { text: file.basename });
 
         // Add tags for current note
-        if (this.showTags  && cacheEntry.tags.length > 0) {
+        if (this.toggleTags && cacheEntry.tags.length > 0) { // Use toggle state
             const currentNoteCacheEntry = await this.cacheLinkData(file);
             this.renderTags(currentLi, currentNoteCacheEntry.tags);
         }
@@ -763,27 +925,27 @@ export default class LinkNavigationPlugin extends Plugin {
         await this.renderOutlinksIteratively(file, outlinksUl, outlinksDepth);
 
         // Render Canvas links
-        if (this.showCanvasLinks && cacheEntry.canvasLinks.length > 0) {
+        if (this.toggleCanvasLinks && cacheEntry.canvasLinks.length > 0) { // Use toggle state
             this.renderCanvasLinks(hierarchyUl, cacheEntry.canvasLinks);
         }
 
     }
-    
+
     // 3.3.1 Search for Inlinks: top-down approach
     // async renderInlinksIteratively(file: TFile, parentEl: HTMLElement, maxDepth: number) {
     //     const inlinkMap = new Map<string, { depth: number; file: TFile }>();
     //     const stack: { file: TFile; depth: number }[] = [{ file, depth: 0 }];
     //     const processedLinks: Set<string> = new Set();
-    
+
     //     while (stack.length > 0) {
     //         const popped = stack.pop();
     //         if (!popped) continue;
     //         const { file: currentFile, depth } = popped;
-            
+
     //         if (depth >= maxDepth || processedLinks.has(currentFile.path)) {
     //             continue;
     //         }
-    
+
     //         processedLinks.add(currentFile.path);
     //         const cacheEntry = await this.cacheLinkData(currentFile);
     //         for (const inlink of cacheEntry.inlinks) {
@@ -797,18 +959,18 @@ export default class LinkNavigationPlugin extends Plugin {
     //             }
     //         }
     //     }
-    
+
     //     // The deepest inlinks (those furthest from the current note in the link chain) appear at the top.
     //     // As you go down the list, you'll see inlinks that are progressively closer to the current note.
     //     // The shallowest inlinks (those directly linking to the current note) will appear at the bottom of the list.
     //     const sortedInlinks = Array.from(inlinkMap.entries()).sort((a, b) => b[1].depth - a[1].depth);
-    
+
     //     // Find the maximum depth
     //     const maxFoundDepth = Math.max(...sortedInlinks.map(([, { depth }]) => depth));
 
     //     for (const [, { depth, file: sourceFile }] of sortedInlinks) {
     //         const li = parentEl.createEl('li', { cls: 'inlink' });
-            
+
     //         // Calculate indent: deeper inlinks (at the top) have smaller indents
     //         const indent = (maxFoundDepth - depth) * 20;
     //         li.style.marginLeft = `${indent}px`;
@@ -830,44 +992,44 @@ export default class LinkNavigationPlugin extends Plugin {
         const inlinkMap = new Map<string, { depth: number; file: TFile; outlinks: string[] }>();
         const processedLinks: Set<string> = new Set();
         let maxInlinkDepth = 0;
-    
+
         while (inlinkQueue.length > 0) {
             const current = inlinkQueue.shift();
             if (!current) continue;
             const { file: currentFile, depth } = current;
-            
+
             if (depth >= maxDepth || processedLinks.has(currentFile.path)) {
                 continue;
             }
-    
+
             processedLinks.add(currentFile.path);
             const cacheEntry = await this.cacheLinkData(currentFile);
             for (const inlink of cacheEntry.inlinks) {
                 const sourceFile = this.app.metadataCache.getFirstLinkpathDest(inlink, '/');
                 if (sourceFile instanceof TFile && !processedLinks.has(sourceFile.path)) {
                     const inlinkCacheEntry = await this.cacheLinkData(sourceFile);
-                    inlinkMap.set(sourceFile.path, { 
-                        depth: depth + 1, 
-                        file: sourceFile, 
-                        outlinks: inlinkCacheEntry.outlinks 
+                    inlinkMap.set(sourceFile.path, {
+                        depth: depth + 1,
+                        file: sourceFile,
+                        outlinks: inlinkCacheEntry.outlinks
                     });
                     inlinkQueue.push({ file: sourceFile, depth: depth + 1 });
                     maxInlinkDepth = Math.max(maxInlinkDepth, depth + 1);
                 }
             }
         }
-    
+
         const sortedInlinks = Array.from(inlinkMap.entries()).sort((a, b) => b[1].depth - a[1].depth);
         const maxFoundDepth = Math.max(...sortedInlinks.map(([, { depth }]) => depth));
-    
+
         for (const [, { depth, file: sourceFile, outlinks }] of sortedInlinks) {
             const indent = maxFoundDepth - depth;
-            const li = parentEl.createEl('li', { 
+            const li = parentEl.createEl('li', {
                 cls: `inlink inlink-indent-${indent}`
             });
-    
+
             li.createEl('span', { text: '← ', cls: 'inlink-arrow' });
-    
+
             const link = li.createEl('a', { text: sourceFile.basename, cls: 'internal-link' });
             link.addEventListener('click', async (e) => {
                 e.preventDefault();
@@ -877,9 +1039,9 @@ export default class LinkNavigationPlugin extends Plugin {
                     this.app.workspace.getLeaf().openFile(sourceFile);
                 }
             });
-    
+
             // Add tags for inlinks
-            if (this.showTags) {
+            if (this.toggleTags) {  // Use toggle state
                 const inlinkCacheEntry = await this.cacheLinkData(sourceFile);
                 this.renderTags(li, inlinkCacheEntry.tags);
             }
@@ -888,13 +1050,13 @@ export default class LinkNavigationPlugin extends Plugin {
             const attachmentsContainer = li.createEl('div', { cls: 'inlink-attachments' });
             // Render attachments for the inlink itself
             // Render attachments for the inlink
-            if (this.showAttachments) {
+            if (this.toggleAttachments) { // Use toggle state
                 const inlinkCacheEntry = await this.cacheLinkData(sourceFile);
                 await this.renderAttachmentsForOutlink(sourceFile, attachmentsContainer, inlinkCacheEntry.attachments);
             }
 
             // Add outlinks (initially hidden)
-            if (outlinks.length > 0 || (this.showAttachments && sourceFile)) {
+            if (outlinks.length > 0 || (this.toggleAttachments && sourceFile)) { // Use toggle state
                 const outlinksUl = li.createEl('ul', { cls: 'inlink-outlinks' });
                 if (!this.outlinksOfInlinksVisible) {
                     outlinksUl.addClass('hidden');
@@ -913,9 +1075,9 @@ export default class LinkNavigationPlugin extends Plugin {
                                 this.app.workspace.getLeaf().openFile(outlinkFile);
                             }
                         });
-                        
+
                         // Add tags for outlinks of inlinks
-                        if (this.showTags) {
+                        if (this.toggleTags) { // Use toggle state
                             const outlinkCacheEntry = await this.cacheLinkData(outlinkFile);
                             this.renderTags(outLi, outlinkCacheEntry.tags);
                         }
@@ -923,7 +1085,7 @@ export default class LinkNavigationPlugin extends Plugin {
                 }
             }
         }
-    
+
         return maxInlinkDepth;
     }
 
@@ -934,8 +1096,8 @@ export default class LinkNavigationPlugin extends Plugin {
     }
 
     private async renderAttachmentsForOutlink(file: TFile, parentEl: HTMLElement, attachments: string[]) {
-        if (!this.showAttachments || attachments.length === 0) return;
-    
+        if (!this.toggleAttachments || attachments.length === 0) return; // Use toggle state
+
         const attachmentsUl = parentEl.createEl('ul', { cls: 'outlink-attachments' });
         for (const attachment of attachments) {
             const li = attachmentsUl.createEl('li');
@@ -958,9 +1120,9 @@ export default class LinkNavigationPlugin extends Plugin {
     // 3.3.2 Search for Outlinks and create indents (from fileCache, frontmatter & links in Canvas) 
     // async renderOutlinksRecursively(file: TFile, parentEl: HTMLElement, depth: number, processedLinks: Set<string>) {
     //     if (depth <= 0 || file.extension === 'canvas') return;
-    
+
     //     const cacheEntry = await this.cacheLinkData(file);
-    
+
     //     for (const outlink of cacheEntry.outlinks) {
     //         const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, file.path);
     //         if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
@@ -982,44 +1144,44 @@ export default class LinkNavigationPlugin extends Plugin {
         const queue: { file: TFile; depth: number; element: HTMLElement }[] = [{ file, depth: 0, element: parentEl }];
         const processedLinks: Set<string> = new Set();
         const processedAttachments: Map<string, Set<string>> = new Map();
-    
+
         while (queue.length > 0) {
             const current = queue.shift();
             if (!current) continue;
             const { file: currentFile, depth, element: currentEl } = current;
-    
+
             if (depth >= maxDepth || currentFile.extension === 'canvas' || processedLinks.has(currentFile.path)) {
                 continue;
             }
-    
+
             processedLinks.add(currentFile.path);
             const cacheEntry = await this.cacheLinkData(currentFile);
-    
-            if (cacheEntry.outlinks.length > 0 || (this.showAttachments && cacheEntry.attachments.length > 0)) {
+
+            if (cacheEntry.outlinks.length > 0 || (this.toggleAttachments && cacheEntry.attachments.length > 0)) { // Use toggle state
                 const outlinksUl = currentEl.createEl('ul', { cls: 'outlink-outlinks' });
-    
+
                 // Render attachments for the current outlink
-                if (this.showAttachments) {
+                if (this.toggleAttachments) { // Use toggle state
                     const newAttachments = this.getNewAttachments(currentFile.path, cacheEntry.attachments, processedAttachments);
                     if (newAttachments.length > 0) {
                         this.renderAttachments(outlinksUl, newAttachments);
                     }
                 }
-    
+
                 for (const outlink of cacheEntry.outlinks) {
                     const linkedFile = this.app.metadataCache.getFirstLinkpathDest(outlink, currentFile.path);
                     if (linkedFile instanceof TFile && !processedLinks.has(linkedFile.path)) {
                         const li = outlinksUl.createEl('li', { cls: `outlink outlink-depth-${depth}` });
-                        
+
                         li.createEl('span', { text: '→ ' });
                         const link = li.createEl('a', { text: linkedFile.basename, cls: 'internal-link' });
-    
+
                         // Render tags if showTags is true
-                        if (this.showTags) {
+                        if (this.toggleTags) { // Use toggle state
                             const outlinkCacheEntry = await this.cacheLinkData(linkedFile);
                             this.renderTags(li, outlinkCacheEntry.tags);
                         }
-    
+
                         link.addEventListener('click', async (e) => {
                             e.preventDefault();
                             if (e.metaKey || e.ctrlKey) {
@@ -1028,9 +1190,9 @@ export default class LinkNavigationPlugin extends Plugin {
                                 this.app.workspace.getLeaf().openFile(linkedFile);
                             }
                         });
-    
+
                         // Render attachments for this outlink (outlink of outlink)
-                        if (this.showAttachments) {
+                        if (this.toggleAttachments) { // Use toggle state
                             const outlinkCacheEntry = await this.cacheLinkData(linkedFile);
                             const newAttachments = this.getNewAttachments(linkedFile.path, outlinkCacheEntry.attachments, processedAttachments);
                             if (newAttachments.length > 0) {
@@ -1038,23 +1200,23 @@ export default class LinkNavigationPlugin extends Plugin {
                                 this.renderAttachments(attachmentsContainer, newAttachments);
                             }
                         }
-    
+
                         queue.push({ file: linkedFile, depth: depth + 1, element: li });
                     }
                 }
             }
         }
     }
-    
+
     private getNewAttachments(filePath: string, attachments: string[], processedAttachments: Map<string, Set<string>>): string[] {
         if (!processedAttachments.has(filePath)) {
             processedAttachments.set(filePath, new Set());
         }
         const fileProcessedAttachments = processedAttachments.get(filePath)!;
-        
+
         const newAttachments = attachments.filter(attachment => !fileProcessedAttachments.has(attachment));
         newAttachments.forEach(attachment => fileProcessedAttachments.add(attachment));
-        
+
         return newAttachments;
     }
 
@@ -1070,19 +1232,19 @@ export default class LinkNavigationPlugin extends Plugin {
                 e.preventDefault();
                 // Try different path variations to find the canvas file
                 let canvasFile = this.app.metadataCache.getFirstLinkpathDest(`${link}.canvas`, '/');
-                
+
                 if (!canvasFile) {
                     // Try finding it by normalized path
-                    const files = this.app.vault.getFiles().filter(f => 
-                        f.extension === 'canvas' && 
+                    const files = this.app.vault.getFiles().filter(f =>
+                        f.extension === 'canvas' &&
                         f.basename.toLowerCase() === link.toLowerCase()
                     );
-                    
+
                     if (files.length > 0) {
                         canvasFile = files[0];
                     }
                 }
-    
+
                 if (canvasFile instanceof TFile) {
                     if (e.metaKey || e.ctrlKey) {
                         await this.openInNewLeaf(canvasFile);
@@ -1092,17 +1254,17 @@ export default class LinkNavigationPlugin extends Plugin {
                 } else {
                     // Provide more detailed error message
                     new Notice(`Canvas file not found: ${link}\nTried paths:\n- ${link}.canvas`);
-                    console.error('Canvas file not found. Link:', link, 'Available canvas files:', 
+                    console.error('Canvas file not found. Link:', link, 'Available canvas files:',
                         this.app.vault.getFiles().filter(f => f.extension === 'canvas').map(f => f.path));
                 }
 
-                
+
                 if (canvasFile instanceof TFile) {
                     const cacheEntry = await this.cacheLinkData(canvasFile);
                     this.renderAttachments(li, cacheEntry.attachments);
                 }
 
-                if (this.settings.showTags && canvasFile instanceof TFile) {
+                if (this.toggleTags && canvasFile instanceof TFile) {  // Use toggle state
                     const canvasCacheEntry = await this.cacheLinkData(canvasFile);
                     this.renderTags(li, canvasCacheEntry.tags);
                 }
@@ -1119,10 +1281,10 @@ export default class LinkNavigationPlugin extends Plugin {
         const titleWidth = titleRect.width;
         const inlinksWidth = this.inlinksEl?.offsetWidth || 0;
         const outlinksWidth = this.outlinksEl?.offsetWidth || 0;
-    
+
         const totalWidth = inlinksWidth + titleWidth + outlinksWidth;
         const isCompact = totalWidth > availableWidth * 0.9; // 90% threshold
-    
+
         viewHeader.classList.toggle('link-navigator-compact', isCompact);
     }
 
@@ -1132,9 +1294,9 @@ export default class LinkNavigationPlugin extends Plugin {
         if (this.detailsEl && this.shouldShowDetailedView) {
             const target = event.target as HTMLElement;
             const detailsInner = this.detailsEl.querySelector('.link-navigator-details');
-            if (detailsInner instanceof HTMLElement && 
-                !detailsInner.contains(target) && 
-                !this.inlinksEl?.contains(target) && 
+            if (detailsInner instanceof HTMLElement &&
+                !detailsInner.contains(target) &&
+                !this.inlinksEl?.contains(target) &&
                 !this.outlinksEl?.contains(target)) {
                 const view = this.app.workspace.getActiveViewOfType(MarkdownView);
                 const file = this.app.workspace.getActiveFile();
@@ -1168,7 +1330,7 @@ export default class LinkNavigationPlugin extends Plugin {
                 entriesRemoved++;
             }
         }
-        
+
         if (entriesRemoved > 0 && this.settings.showCacheCleanupNotice) {
             if (now - this.lastCleanupNotice > this.CLEANUP_NOTICE_COOLDOWN) {
                 new Notice(`Cleaned up ${entriesRemoved} cache entries.`);
@@ -1252,43 +1414,216 @@ class LinkNavigationSettingTab extends PluginSettingTab {
     }
 
     display(): void {
-        const {containerEl} = this;
+        const { containerEl } = this;
         containerEl.empty();
 
+        containerEl.createEl('h2', { text: 'Link Display Settings' });
+
         new Setting(containerEl)
-            .setName('Search canvas links')
-            .setDesc('Enable or disable searching for links in Canvas files')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showCanvasLinks)
+            .setName('Inlink format')
+            .setDesc('Format for inlink display. Use {label}, {count}, {arrow}, and {icon}. Example: "{arrow} {label} ({count})" might display as " ⇦ Inlinks (5)')
+            .addText(text => text
+                .setPlaceholder('{arrow} {label} ({count})')
+                .setValue(this.plugin.settings.inlinkFormat)
                 .onChange(async (value) => {
-                    this.plugin.settings.showCanvasLinks = value;
+                    this.plugin.settings.inlinkFormat = value;
                     await this.plugin.saveSettings();
                 }));
-        
+
+        // Inlink Icon Setting
         new Setting(containerEl)
-            .setName('Show attachments')
-            .setDesc('Display attachments in the link navigation')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showAttachments)
+            .setName('Inlink {icon}')
+            .setDesc('Select a Lucide icon to represent inlinks.')
+            .addText(text => {
+                this.plugin.inlinkIconTextComponent = text; // Store the TextComponent
+                text
+                    .setPlaceholder('Icon ID')
+                    .setValue(this.plugin.settings.inlinkIcon)
+                    .onChange(async (value) => {
+                        this.plugin.settings.inlinkIcon = value;
+                        await this.plugin.saveSettings();
+                    });
+                text.inputEl.setAttribute('data-setting-id', 'inlinkIcon');
+            })
+            .addButton(button => {
+                button
+                    .setIcon('search')
+                    .setTooltip('Pick icon')
+                    .onClick(() => {
+                        if (this.plugin.inlinkIconTextComponent) {
+                            new IconPickerModal(this.app, this.plugin, 'inlinkIcon', this.plugin.inlinkIconTextComponent).open();
+                        } else {
+                            console.error("Inlink Icon TextComponent is not initialized.");
+                        }
+
+                    });
+
+            });
+        new Setting(containerEl)
+
+            .setName('Inlink {label}')
+            .setDesc('Text for the inlink label (e.g., "Inlinks").')
+            .addText(text => text
+                .setPlaceholder('INLINKS')
+                .setValue(this.plugin.settings.inlinkText)
                 .onChange(async (value) => {
-                    this.plugin.settings.showAttachments = value;
+                    this.plugin.settings.inlinkText = value;
                     await this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
-            .setName('Show tags')
-            .setDesc('Display tags for inlinks, outlinks, and canvas links')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showTags)
+            .setName('Inlink {arrow}')
+            .setDesc('Character to use as the inlink arrow.')
+            .addText(text => text
+                .setPlaceholder('←')
+                .setValue(this.plugin.settings.inlinkArrow)
                 .onChange(async (value) => {
-                    this.plugin.settings.showTags = value;
+                    this.plugin.settings.inlinkArrow = value;
                     await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show inlink count')
+            .setDesc('Display the number of inlinks.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showInlinkCount)
+                .onChange(async (value) => {
+                    this.plugin.settings.showInlinkCount = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName("Inlink custom CSS class")
+            .setDesc("Add custom CSS classes to inlink elements (space separated). E.g.: `custom-inlink-class` then in your custom CSS snippet you could use this custom CLASS to further style you inlink. ")
+            .addText(text => text
+                .setPlaceholder("custom-inlink-class")
+                .setValue(this.plugin.settings.inlinkCustomClass)
+                .onChange(async (value) => {
+                    this.plugin.settings.inlinkCustomClass = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
+        new Setting(containerEl)
+            .setName('Outlink format')
+            .setDesc('Format for outlink display. Use {label}, {count}, {arrow}, and {icon}.')
+            .addText(text => text
+                .setPlaceholder('{label} ({count}) {arrow}')
+                .setValue(this.plugin.settings.outlinkFormat)
+                .onChange(async (value) => {
+                    this.plugin.settings.outlinkFormat = value;
+                    await this.plugin.saveSettings();
+                }));
+
+
+        // Outlink Icon Setting
+        new Setting(containerEl)
+            .setName('Outlink icon')
+            .setDesc('Select a Lucide icon to represent outlinks.')
+            .addText(text => {
+                this.plugin.outlinkIconTextComponent = text;  // Store the TextComponent instance
+                text
+                    .setPlaceholder('Icon ID')
+                    .setValue(this.plugin.settings.outlinkIcon)
+                    .onChange(async (value) => {
+                        this.plugin.settings.outlinkIcon = value;
+                        await this.plugin.saveSettings();
+                    });
+                text.inputEl.setAttribute('data-setting-id', 'outlinkIcon'); // Add this line!
+            })
+            .addButton(button => { // Use addButton on the Setting object
+                button
+                    .setIcon('search')
+                    .setTooltip('Pick icon')
+                    .onClick(() => {
+                        if (this.plugin.outlinkIconTextComponent) {
+                            new IconPickerModal(this.app, this.plugin, 'outlinkIcon', this.plugin.outlinkIconTextComponent).open();
+                        } else {
+                            console.error("Outlink Icon TextComponent is not initialized.");
+                        }
+                    });
+            });
+
+        new Setting(containerEl)  // Corrected: Moved Outlink Label setting *after* Outlink Icon
+            .setName('Outlink label')
+            .setDesc('Text for the outlink label (e.g., "Outlinks").')
+            .addText(text => text
+                .setPlaceholder('OUTLINKS')
+                .setValue(this.plugin.settings.outlinkText)
+                .onChange(async (value) => {
+                    this.plugin.settings.outlinkText = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Outlink arrow')
+            .setDesc('Character to use as the outlink arrow.')
+            .addText(text => text
+                .setPlaceholder('→')
+                .setValue(this.plugin.settings.outlinkArrow)
+                .onChange(async (value) => {
+                    this.plugin.settings.outlinkArrow = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show outlink count')
+            .setDesc('Display the number of outlinks.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showOutlinkCount)
+                .onChange(async (value) => {
+                    this.plugin.settings.showOutlinkCount = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName("Outlink custom CSS class")
+            .setDesc("Add custom CSS classes to outlink elements (space separated). . E.g.: `custom-outlink-class` then in your custom CSS snippet you could use this custom CLASS to further style you outlink. ")
+            .addText(text => text
+                .setPlaceholder("custom-outlink-class")
+                .setValue(this.plugin.settings.outlinkCustomClass)
+                .onChange(async (value) => {
+                    this.plugin.settings.outlinkCustomClass = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
+        containerEl.createEl('h2', { text: 'General Settings' });
+
+        // Use isCanvasLinksEnabled for the setting
+        new Setting(containerEl)
+            .setName('Enable Canvas Links Toggle')
+            .setDesc('Show the toggle button for Canvas links in the detailed view.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.isCanvasLinksEnabled)
+                .onChange(async (value) => {
+                    await this.plugin.updateSettings({ isCanvasLinksEnabled: value });
+                }));
+
+        // Use isAttachmentsEnabled for the setting
+        new Setting(containerEl)
+            .setName('Enable Attachments Toggle')
+            .setDesc('Show the toggle button for attachments in the detailed view.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.isAttachmentsEnabled)
+                .onChange(async (value) => {
+                    await this.plugin.updateSettings({ isAttachmentsEnabled: value });
+                }));
+
+        // Use isTagsEnabled for the setting
+        new Setting(containerEl)
+            .setName('Enable Tags Toggle')
+            .setDesc('Show the toggle button for tags in the detailed view.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.isTagsEnabled)
+                .onChange(async (value) => {
+                    await this.plugin.updateSettings({ isTagsEnabled: value });
                 }));
 
 
         new Setting(containerEl)
             .setName('Cache timeout')
-            .setDesc('Time (in minutes) before cached data is considered stale')
+            .setDesc('How long (in minutes) to keep link data in the cache before refreshing.  Higher values reduce CPU usage but may show slightly outdated information.')
             .addText(text => text
                 .setPlaceholder('Enter cache timeout')
                 .setValue((this.plugin.settings.cacheTimeout / 60000).toString())
@@ -1302,7 +1637,7 @@ class LinkNavigationSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Cache cleanup interval')
-            .setDesc('Set the interval (in minutes) for cleaning up the cache')
+            .setDesc('How often (in minutes) to automatically clean up old entries in the cache.')
             .addText(text => text
                 .setPlaceholder('Enter cache cleanup interval (minutes)')
                 .setValue(this.plugin.settings.cacheCleanupInterval.toString())
@@ -1318,26 +1653,26 @@ class LinkNavigationSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Cache status')
-            .setDesc('Display the current cache status')
+            .setDesc('View the current size and status of the link cache.')
             .addButton((btn) => {
-                btn.setButtonText('Show Cache Status')
+                btn.setButtonText('Show cache status')
                     .onClick(() => {
                         this.plugin.showCacheStatus();
                     });
             });
-            
+
         new Setting(containerEl)
             .setName('Rebuild cache')
-            .setDesc('Manually rebuild the cache')
+            .setDesc('Manually rebuild the link cache. This can be useful if you suspect the cache is corrupted or out of sync.')
             .addButton((btn) => {
-                btn.setButtonText('Rebuild Cache')
+                btn.setButtonText('Rebuild cache')
                     .onClick(() => {
                         this.plugin.rebuildCache();
                     });
             });
         new Setting(containerEl)
             .setName('Show cache cleanup notice')
-            .setDesc('Display a notice when the cache is being cleaned up')
+            .setDesc('Display a brief notification when the cache is automatically cleaned.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.showCacheCleanupNotice)
                 .onChange(async (value) => {

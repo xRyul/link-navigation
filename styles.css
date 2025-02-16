@@ -108,6 +108,11 @@
 
 /* Add this if you want to ensure minimum spacing between elements */
 
+.link-navigator-icon {
+    vertical-align: middle;
+    display: inline-flex; 
+    align-items: center;   
+}
 
 .outlink-outlinks {
     padding-left: 20px;
@@ -648,4 +653,6 @@
     font-size: 0.9em;
     color: var(--text-muted);
 }
+
+/* CUSTOM */
 
