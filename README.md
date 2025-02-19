@@ -2,13 +2,17 @@
 
 ![image](https://github.com/user-attachments/assets/25f57e8f-e3ae-4925-b41c-6206845504ae)
 
-
 https://github.com/user-attachments/assets/54048449-3e42-4a07-8a86-0772b81a51e4
 
+This plugin helps you navigate back and forth between your links from current note `N` levels deep.
 
-"Top-down" Link navigation.
 
-This plugin lets you navigate your notes N levels deep. It shows both incoming links (inlinks) and outgoing links (outlinks), including links from Canvas files.
+## Features
+
+- Hierarchical view of links*
+- Show links from Canvas files
+- Depth Control for Link Hierarchies: Allows users to define how deep the plugin should traverse the link hierarchy (e.g., links of links).
+- Caching Mechanism
 
 
 ## Background
@@ -27,33 +31,48 @@ Thus it helps by allowing you to:
 - Find your way back to important notes (like MOCs) without remembering exact titles or clicking endlessly
 
 
-## Features
 
-- Hierarchical view of links*
-- Show links from Canvas files
-- Depth Control for Link Hierarchies: Allows users to define how deep the plugin should traverse the link hierarchy (e.g., links of links).
-- Caching Mechanism
+## How to use:
 
-# Todo:
+The plugin simply allows to navigate between links in your note. 
 
-- [x] Mobile support!!!
-- [x] Improve indentation of current-note
-- [ ] Add support for changing inlinks, outlinks, to e.g. button, incoming links, outgoing links
-- [ ] Fix detailed view not closing in external / 2nd window 
-- [ ] Investigate and optimise. Currently, pLugin load time fluctates between 1ms and 15ms??
-- [ ] Better support with 'daily-nav-bar' plugin
-- [ ] If 2 same notes open, then NavigationalLinks gonna show up only on 1 
-- [ ] notes deep inside the folder. improve layout
-- [ ] add note previews on link hover
-- [ ] add support for tags
+1. Install the plugin
+2. Open any new note which has links embedded e.g.: in the below example my current note has 2 links 
 
-## Settings
+    - ![image](https://github.com/user-attachments/assets/ba294f42-ad14-4ac9-9c18-835905a7c502)
 
-- **Search Canvas Links**: Enable or disable including Canvas files in link searches.
-- **Cache Timeout**: Set how long to keep link data in cache before refreshing.
-- **Cache Cleanup Interval**: Define how often to clean up the cache.
-- **Show Cache Cleanup Notice**: Choose whether to display notifications about cache cleanup.
 
+3. At the top of each note, you'll see two new elements INLINKS & OUTLINKS (you can customize it and have it as any other text, ICON or color) which you can click on to see Detailed Link View. This view shows a hierarchy of links related to your current note.
+  
+    - ← INLINKS (X): Shows how many notes link to the current note.
+    - OUTLINKS (Y) →: Shows how many links are in the current note.
+    - ![image](https://github.com/user-attachments/assets/3891a8de-f49a-44f0-8b36-60e5ea8d3900)
+    - Or in a graph it would look something like this: 
+    ![image](https://github.com/user-attachments/assets/4b9037d0-d659-4275-933a-67ef8957f7a4)
+
+4. You can specify how deep you see the link connections by adjusting "Depth".
+
+   - ![image](https://github.com/user-attachments/assets/d8a23e04-d588-4b4a-a631-b0d49ef693be)
+   - Or in graph view it would appear like this:
+   ![image](https://github.com/user-attachments/assets/28552300-3968-44ae-bd56-b8907254c85d)
+
+
+5. For instance if you would like to see what link are inside Note 1 or Note 2, from within the note you are currently in - then, you can toggle the "Toggle outlinks of inlinks" button:
+    - ![image](https://github.com/user-attachments/assets/fd8216f4-a921-4e86-bf25-119de9d343d2)
+    - This allows you to to open Links which were embedded inside previous notes but without actually needing to navigate via them. As you can simply Click on any link in the detailed view to open that note or Use Cmd/Ctrl + Click to open a link in a new tab.
+    - For instance in the screenshot, we could click on "Note1-1" to open it directly, without needing to go the long route via "Note1" and only then to "Note1-1"
+
+
+6. Some other features:
+    - Refresh button: Click this to update the link data if you've made recent changes.
+    - Canvas Links Toggle: Turn this on/off to show/hide links from Canvas files.
+    - Outlinks of Inlinks Toggle: This shows you what other notes your inlinks link to.
+    - Hover Preview: Hover over the "INLINKS" or "OUTLINKS" text (without expanding the detailed view) to see a quick list of linked notes.
+
+
+Hope this explains things a little. 
+
+---
 
 *Links - it mainly deals with internal link:
 - Resolved links: Links to notes that actually exist in your vault.
